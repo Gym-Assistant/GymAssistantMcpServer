@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using GymClient = GymAssistant.Client.Client;
 
 namespace GymAssistant.McpServer.Infra;
 

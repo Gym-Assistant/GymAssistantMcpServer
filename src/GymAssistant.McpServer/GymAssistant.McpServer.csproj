@@ -17,4 +17,8 @@
     <PackageReference Include="GymAssistant.Client" Version="*" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Using Include="GymAssistant.Client.Client" Alias="GymClient" />
+  </ItemGroup>
+
 </Project>
