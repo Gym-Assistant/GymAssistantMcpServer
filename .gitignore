@@ -1,0 +1,24 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.pidb
+*.userprefs
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local secrets
+*.env
+.env*
+!.env.example
+
+# Docker
+.docker-buildx-cache/
