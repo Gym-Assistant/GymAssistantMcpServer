@@ -11,9 +11,9 @@ public static class BodyTools
      Description("Список характеристик тела пользователя (метрик: вес, талия, бицепс и т.п.) с пагинацией. Scope: body:read.")]
     public static Task<UserCharacteristicViewModelPaged> ListBodyCharacteristicsAsync(
         GymClient client,
-        [Description("Offset для пагинации (0 по умолчанию)")] int offset,
-        [Description("Limit (по умолчанию 100, рекомендуется не более 200)")] int limit,
-        CancellationToken ct)
+        CancellationToken ct,
+        [Description("Offset для пагинации (0 по умолчанию)")] int offset = 0,
+        [Description("Limit (по умолчанию 100, рекомендуется не более 200)")] int limit = 100)
         => client.GetBodyCharacteristicsAsync(offset, limit, null, null, ct);
 
     [McpServerTool(Name = "list_body_characteristics_with_latest", ReadOnly = true, Idempotent = true, Destructive = false),
@@ -61,14 +61,14 @@ public static class BodyTools
      Description("История замеров (stamps) пользователя по всем характеристикам тела с пагинацией. Scope: body:read.")]
     public static Task<CharacteristicStampViewModelPaged> ListBodyStampsAsync(
         GymClient client,
-        [Description("Offset для пагинации (0 по умолчанию)")] int offset,
-        [Description("Limit (по умолчанию 200)")] int limit,
-        CancellationToken ct)
+        CancellationToken ct,
+        [Description("Offset для пагинации (0 по умолчанию)")] int offset = 0,
+        [Description("Limit (по умолчанию 200)")] int limit = 200)
         => client.GetBodyStampsAsync(offset, limit, null, null, ct);
 
-    [McpServerTool(Name = "create_body_stamp", Destructive = true),
-     Description("Создать или обновить один или несколько замеров (stamps) по характеристикам тела пользователя (batch upsert). Каждый элемент содержит StampId, UserCharacteristicId или CharacteristicName, MeasuredAt, Value, Side, Unit и пр. Scope: body:write.")]
-    public static Task CreateBodyStampAsync(
+    [McpServerTool(Name = "create_body_stamps", Destructive = true),
+     Description("Добавить замеры (один или несколько) по характеристикам тела пользователя (batch upsert). Каждый элемент содержит StampId, UserCharacteristicId или CharacteristicName, MeasuredAt, Value, Side, Unit и пр. Scope: body:write.")]
+    public static Task CreateBodyStampsAsync(
         GymClient client,
         [Description("Список замеров (UpsertStampItemViewModel) для batch-апсёрта. Каждый элемент — отдельный замер с MeasuredAt и Value.")]
         IEnumerable<UpsertStampItemViewModel> body,
