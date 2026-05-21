@@ -8,13 +8,15 @@
     <RootNamespace>GymAssistant.McpServer</RootNamespace>
     <AssemblyName>GymAssistant.McpServer</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol" Version="1.3.*" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.*" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.*" />
-    <PackageReference Include="GymAssistant.Client" Version="*" />
+    <PackageReference Include="GymAssistant.Client" Version="0.7.*" />
   </ItemGroup>
 
   <ItemGroup>
