@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GymAssistant.McpServer/GymAssistant.McpServer.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GymAssistant.McpServer.Tests/GymAssistant.McpServer.Tests.csproj" />
+  </Folder>
+</Solution>
