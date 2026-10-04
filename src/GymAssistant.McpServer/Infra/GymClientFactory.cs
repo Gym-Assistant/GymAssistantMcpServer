@@ -23,7 +23,12 @@ public static class GymClientFactory
             .AddTypedClient((http, sp) =>
             {
                 var cfg = sp.GetRequiredService<EnvConfig>();
-                return new GymClient(cfg.ApiUrl.ToString(), http);
+                // NSwag routes already include /api; accept the documented API-root URL
+                // without adding that prefix twice.
+                var backendUrl = cfg.ApiUrl.ToString().TrimEnd('/');
+                if (backendUrl.EndsWith("/api", StringComparison.OrdinalIgnoreCase))
+                    backendUrl = backendUrl[..^4];
+                return new GymClient(backendUrl, http);
             })
             .AddHttpMessageHandler<ApiTokenHandler>();
         return services;
