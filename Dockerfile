@@ -13,13 +13,8 @@ COPY src/GymAssistant.McpServer/packages.lock.json ./src/GymAssistant.McpServer/
 # Source `gym` is declared in nuget.config without credentials — authorize at runtime:
 RUN --mount=type=secret,id=ghpat \
     --mount=type=secret,id=ghuser \
-    GITHUB_PACKAGES_PAT="$(cat /run/secrets/ghpat)" \
-    GITHUB_USERNAME="$(cat /run/secrets/ghuser)" \
-    dotnet nuget update source gym \
-      --username "$GITHUB_USERNAME" \
-      --password "$GITHUB_PACKAGES_PAT" \
-      --store-password-in-clear-text \
-    && dotnet restore ./src/GymAssistant.McpServer/GymAssistant.McpServer.csproj \
+    NuGetPackageSourceCredentials_gym="Username=$(cat /run/secrets/ghuser);Password=$(cat /run/secrets/ghpat);ValidAuthenticationTypes=Basic" \
+    dotnet restore ./src/GymAssistant.McpServer/GymAssistant.McpServer.csproj \
          -a $TARGETARCH --locked-mode
 
 COPY src/ ./src/
@@ -34,12 +29,11 @@ RUN dotnet publish ./src/GymAssistant.McpServer/GymAssistant.McpServer.csproj \
     /p:DebugSymbols=false
 
 # ---- Runtime stage ----
-FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0
 WORKDIR /app
 COPY --from=build /app/. .
 
 # Non-root
-RUN addgroup -S app && adduser -S -G app app && chown -R app:app /app
-USER app
+USER $APP_UID
 
 ENTRYPOINT ["./GymAssistant.McpServer"]

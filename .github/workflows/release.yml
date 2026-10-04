@@ -4,6 +4,10 @@ on:
   push:
     tags: ['v*.*.*']
 
+permissions:
+  contents: write
+  packages: read
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -28,6 +32,8 @@ jobs:
           GH_USER: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          umask 077
+          trap 'rm -f /tmp/ghuser /tmp/ghpat' EXIT
           echo -n "$GH_USER" > /tmp/ghuser
           echo -n "$GH_TOKEN" > /tmp/ghpat
           docker buildx build \
