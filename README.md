@@ -12,12 +12,14 @@ MCP-сервер, который даёт твоему Claude/Cursor/Codex до�
 
 Если у тебя ещё нет аккаунта на GymAssistant — заведи его через того же бота или через мини-аппу.
 
+Образ выпускается в GitHub Container Registry. Если пакет приватный, сначала войти в `ghcr.io` своей учётной записью GitHub с правом `read:packages`; видимость пакета не расширяется автоматически.
+
 ### 2. Подключи к Claude Code
 
 ```bash
 claude mcp add gymassistant -- docker run -i --rm \
   -e GYM_API_TOKEN=gma_ТВОЙ_ТОКЕН \
-  gymassistant/mcp-server:latest
+  ghcr.io/gym-assistant/gymassistant-mcp-server:latest
 ```
 
 ### 3. Подключи к Cursor / Continue / другим MCP-клиентам
@@ -28,7 +30,7 @@ claude mcp add gymassistant -- docker run -i --rm \
   "mcpServers": {
     "gymassistant": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "GYM_API_TOKEN", "gymassistant/mcp-server:latest"],
+      "args": ["run", "-i", "--rm", "-e", "GYM_API_TOKEN", "ghcr.io/gym-assistant/gymassistant-mcp-server:latest"],
       "env": { "GYM_API_TOKEN": "gma_ТВОЙ_ТОКЕН" }
     }
   }

@@ -6,7 +6,7 @@ on:
 
 permissions:
   contents: write
-  packages: read
+  packages: write
 
 jobs:
   publish:
@@ -20,8 +20,9 @@ jobs:
 
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract tag without 'v'
         id: tag
@@ -41,8 +42,8 @@ jobs:
             --secret id=ghuser,src=/tmp/ghuser \
             --secret id=ghpat,src=/tmp/ghpat \
             --push \
-            -t gymassistant/mcp-server:${{ steps.tag.outputs.version }} \
-            -t gymassistant/mcp-server:latest \
+            -t ghcr.io/gym-assistant/gymassistant-mcp-server:${{ steps.tag.outputs.version }} \
+            -t ghcr.io/gym-assistant/gymassistant-mcp-server:latest \
             .
           rm /tmp/ghuser /tmp/ghpat
 
