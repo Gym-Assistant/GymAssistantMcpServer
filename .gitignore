@@ -22,3 +22,7 @@ Thumbs.db
 
 # Docker
 .docker-buildx-cache/
+
+# Python integration checks
+__pycache__/
+*.pyc

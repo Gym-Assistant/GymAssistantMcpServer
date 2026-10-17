@@ -2,7 +2,7 @@
 
 MCP-сервер, который даёт твоему Claude/Cursor/Codex доступ к твоим данным [GymAssistant](https://gym-assistant.ru) через Model Context Protocol.
 
-40 тулз — read и write по тренировкам, замерам тела, упражнениям и планам. Авторизация — через **Personal API Token** (PAT) с гранулярными scope'ами.
+41 инструмент — read и write по тренировкам, замерам тела, упражнениям и планам. Авторизация — через **Personal API Token** (PAT) с гранулярными scope'ами.
 
 ## Установка
 
@@ -45,7 +45,7 @@ claude mcp add gymassistant -- docker run -i --rm \
 
 ## Что умеют тулзы
 
-40 тулз в 6 группах:
+41 инструмент в 7 группах:
 
 | Группа | Read тулзы | Write тулзы |
 |---|---|---|
@@ -54,9 +54,14 @@ claude mcp add gymassistant -- docker run -i --rm \
 | Workouts | `list_workouts`, `get_workout`, `get_workouts_report` | `create_workout`, `update_set`, `delete_workout` |
 | Exercises | `list_exercises`, `list_default_exercises`, `list_exercise_catalogs`, `list_muscles`, `list_equipment` | `create_exercise`, `delete_exercise` |
 | Plans | `list_plans`, `get_plan`, `list_plan_catalog`, `get_plan_from_catalog`, `check_plan_updates` | `create_plan`, `delete_plan`, `fork_plan`, `publish_plan`, `unpublish_plan`, `pull_plan_updates`, `detach_plan` |
+| Apple Health | `get_apple_health_daily` (право `health:read`) | — |
 | Diagnostics | `health_check` | — |
 
 Полные описания и параметры доступны через MCP-протокол — твой Claude/Cursor покажет их автоматически.
+
+## Дневные итоги Apple Health
+
+В приложении iPhone подключить Apple Здоровье и включить сохранение в аккаунте. Для чтения через MCP создать PAT с отдельным правом `health:read`; старые токены его автоматически не получают. Период запроса — до 31 дня включительно (`from`, `to`, YYYY-MM-DD). Ответ содержит показатели, часовой пояс, время чтения на iPhone и получения сервером. `null` означает отсутствие данных, не ноль. Сегодняшние итоги могут дополняться позднее; несколько устройств не суммируются. MCP читает только загруженные на сервер данные и сам HealthKit не опрашивает.
 
 ## Troubleshooting
 
@@ -71,7 +76,7 @@ claude mcp add gymassistant -- docker run -i --rm \
 
 - .NET 10
 - `ModelContextProtocol` 1.3.x
-- `GymAssistant.Client` 0.7.* (NSwag-сгенерированный клиент)
+- `GymAssistant.Client` 0.11.1 (NSwag-сгенерированный клиент)
 - Сервер совместим с любым MCP-клиентом, поддерживающим stdio-транспорт
 
 ## Лицензия

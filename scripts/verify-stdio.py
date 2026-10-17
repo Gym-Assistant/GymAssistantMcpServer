@@ -14,9 +14,10 @@ requests = []
 class Backend(BaseHTTPRequestHandler):
     def do_GET(self):
         requests.append((self.path, self.headers.get('Authorization')))
-        if self.path != '/api/auth/me' or self.headers.get('Authorization') != 'Bearer ' + TOKEN:
+        if self.path not in ('/api/auth/me', '/api/health/apple/daily?from=2026-10-16&to=2026-10-17') or self.headers.get('Authorization') != 'Bearer ' + TOKEN:
             self.send_response(404); self.end_headers(); return
-        body = json.dumps({'id':'11111111-1111-1111-1111-111111111111','username':'runtime-fixture'}).encode()
+        payload = {'id':'11111111-1111-1111-1111-111111111111','username':'runtime-fixture'} if self.path == '/api/auth/me' else [{'snapshot': {'day':'2026-10-17','timeZone':'Asia/Krasnoyarsk','readAt':'2026-10-17T12:00:00Z','values':{'steps':1234,'protein':None}},'deviceId':'11111111-1111-1111-1111-111111111111','receivedAt':'2026-10-17T12:01:00Z'}]
+        body = json.dumps(payload).encode()
         self.send_response(200)
         self.send_header('Content-Type','application/json')
         self.send_header('Content-Length',str(len(body)))
@@ -58,9 +59,14 @@ async def verify(command, url):
         payload = next(json.loads(x) for x in content if x.startswith('{'))
         assert payload['ok'] is True and payload['user']=='runtime-fixture', 'Wrong health result'
         assert requests==[('/api/auth/me','Bearer '+TOKEN)], 'Unexpected backend traffic'
-        await call(4,'ping',{})
+        daily = await call(4,'tools/call',{'name':'get_apple_health_daily','arguments':{'from':'2026-10-16','to':'2026-10-17'}})
+        assert not daily.get('isError',False), 'Health call failed'
+        daily_text = ' '.join(x['text'] for x in daily['content'] if x['type']=='text')
+        assert '1234' in daily_text and 'Asia/Krasnoyarsk' in daily_text and '2026-10-17' in daily_text
+        assert requests[-1]==('/api/health/apple/daily?from=2026-10-16&to=2026-10-17','Bearer '+TOKEN)
+        await call(5,'ping',{})
         print(json.dumps({'initialize':True,'tools':len(names),'health_check':True,
-                          'profile_pat_forwarded':True,'stdout_jsonrpc':True,'backend':'synthetic'}))
+                          'health_daily':True,'profile_pat_forwarded':True,'stdout_jsonrpc':True,'backend':'synthetic'}))
     finally:
         process.stdin.close()
         try: await asyncio.wait_for(process.wait(),10)
