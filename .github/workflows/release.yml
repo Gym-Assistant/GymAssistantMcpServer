@@ -4,6 +4,10 @@ on:
   push:
     tags: ['v*.*.*']
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -16,18 +20,21 @@ jobs:
 
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract tag without 'v'
         id: tag
-        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push multi-arch
         env:
           GH_USER: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          umask 077
+          trap 'rm -f /tmp/ghuser /tmp/ghpat' EXIT
           echo -n "$GH_USER" > /tmp/ghuser
           echo -n "$GH_TOKEN" > /tmp/ghpat
           docker buildx build \
@@ -35,8 +42,8 @@ jobs:
             --secret id=ghuser,src=/tmp/ghuser \
             --secret id=ghpat,src=/tmp/ghpat \
             --push \
-            -t gymassistant/mcp-server:${{ steps.tag.outputs.version }} \
-            -t gymassistant/mcp-server:latest \
+            -t ghcr.io/gym-assistant/gymassistant-mcp-server:${{ steps.tag.outputs.version }} \
+            -t ghcr.io/gym-assistant/gymassistant-mcp-server:latest \
             .
           rm /tmp/ghuser /tmp/ghpat
 

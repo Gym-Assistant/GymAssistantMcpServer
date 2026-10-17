@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   dotnet:
     runs-on: ubuntu-latest
@@ -16,14 +20,9 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Add credentials to `gym` source
-        run: |
-          dotnet nuget update source gym \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --store-password-in-clear-text
-
-      - name: Restore
+      - name: Restore locked dependencies
+        env:
+          NuGetPackageSourceCredentials_gym: Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
         run: dotnet restore --locked-mode
 
       - name: Build
@@ -31,6 +30,9 @@ jobs:
 
       - name: Test
         run: dotnet test -c Release --no-build
+
+      - name: Real stdio initialize, tools and health check
+        run: python3 scripts/verify-stdio.py dotnet src/GymAssistant.McpServer/bin/Release/net10.0/GymAssistant.McpServer.dll
 
   docker:
     runs-on: ubuntu-latest
@@ -44,6 +46,8 @@ jobs:
           GH_USER: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          umask 077
+          trap 'rm -f /tmp/ghuser /tmp/ghpat' EXIT
           echo -n "$GH_USER" > /tmp/ghuser
           echo -n "$GH_TOKEN" > /tmp/ghpat
           docker buildx build \
@@ -51,4 +55,6 @@ jobs:
             --secret id=ghpat,src=/tmp/ghpat \
             --load \
             -t gymassistant/mcp-server:ci .
-          rm /tmp/ghuser /tmp/ghpat
+          test "$(docker image inspect gymassistant/mcp-server:ci --format '{{.Config.User}}')" != 0
+          test -n "$(docker image inspect gymassistant/mcp-server:ci --format '{{.Config.User}}')"
+          python3 scripts/verify-stdio.py docker gymassistant/mcp-server:ci

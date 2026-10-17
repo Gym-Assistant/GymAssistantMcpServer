@@ -4,16 +4,16 @@
     "net10.0": {
       "GymAssistant.Client": {
         "type": "Direct",
-        "requested": "[0.7.*, )",
-        "resolved": "0.7.0",
-        "contentHash": "Oyh81Kove2KTeFBA/Dc65y219Gbj7ZlCRQ5umkhu+BCjwP1ChtXeHXVQZJ8jd/aGX8xjvzNyH4CQaLb3S/vhbg==",
+        "requested": "[0.11.1, )",
+        "resolved": "0.11.1",
+        "contentHash": "WFTNWOT3yiuir/RSAB/V7dBfVOWPoRCKVKViUeJXDRADCxW4ug0qhUCKnDyI1ZHAIZn7RS7t0lZkPXW4qkrkYQ==",
         "dependencies": {
           "Newtonsoft.Json": "13.0.4"
         }
       },
       "Microsoft.Extensions.Hosting": {
         "type": "Direct",
-        "requested": "[10.0.*, )",
+        "requested": "[10.0.8, )",
         "resolved": "10.0.8",
         "contentHash": "VfEyM2BipThcSd0GG/FS2ZPCVCTiosVq2zLKEDsfeMIg78sOVZPEmS7CgWlb+dqTlgXvLSL4OG2q6sM4xRhHNg==",
         "dependencies": {
@@ -43,7 +43,7 @@
       },
       "Microsoft.Extensions.Http": {
         "type": "Direct",
-        "requested": "[10.0.*, )",
+        "requested": "[10.0.8, )",
         "resolved": "10.0.8",
         "contentHash": "/9LU/KWJOrtZJB9ymPjcARDyjp679BvBA/aSncv2Kt84WlSKz767HtxHg8EFsu8n21BMLZi+5XxlkKbLwfn4iA==",
         "dependencies": {
@@ -57,7 +57,7 @@
       },
       "ModelContextProtocol": {
         "type": "Direct",
-        "requested": "[1.3.*, )",
+        "requested": "[1.3.0, )",
         "resolved": "1.3.0",
         "contentHash": "WDaD6z9KkkCUHSo15xK7tYBERHy8uqP+cIUp8uIxhR0yrlpJLXTRcJcUUVqpXlBkV7MK9Eo3mTrAnctLnJuHDQ==",
         "dependencies": {
