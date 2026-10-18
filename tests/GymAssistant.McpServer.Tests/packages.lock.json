@@ -37,8 +37,8 @@
       },
       "GymAssistant.Client": {
         "type": "Transitive",
-        "resolved": "0.11.1",
-        "contentHash": "WFTNWOT3yiuir/RSAB/V7dBfVOWPoRCKVKViUeJXDRADCxW4ug0qhUCKnDyI1ZHAIZn7RS7t0lZkPXW4qkrkYQ==",
+        "resolved": "0.13.0",
+        "contentHash": "p5bxUuSWxEAs9i+sMFiatktNzqObKgJz80P5ucTxijDuY1uq7tAWl0yuIJo9phRKRFDMBknLSyI3CpP+XVrAtA==",
         "dependencies": {
           "Newtonsoft.Json": "13.0.4"
         }
@@ -439,7 +439,7 @@
       "gymassistant.mcpserver": {
         "type": "Project",
         "dependencies": {
-          "GymAssistant.Client": "[0.11.1, )",
+          "GymAssistant.Client": "[0.13.0, )",
           "Microsoft.Extensions.Hosting": "[10.0.8, )",
           "Microsoft.Extensions.Http": "[10.0.8, )",
           "ModelContextProtocol": "[1.3.0, )"
