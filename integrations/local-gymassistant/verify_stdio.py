@@ -1,4 +1,4 @@
-"""Проверка локального MCP через настоящий stdio: состав инструментов и Apple Health.
+"""Проверка локального MCP через настоящий stdio: тренировки, рекорды и Apple Health.
 
 Запуск окружением с зависимостями из requirements.txt:
   python integrations/local-gymassistant/verify_stdio.py               # server.py из репозитория
@@ -138,12 +138,23 @@ async def verify(port, fixture, temporary):
                 bad = await session.call_tool('gym_health_daily', {'from_date': '2026-09-01', 'to_date': '2026-10-17'})
                 assert bad.isError and len(fixture.requests) == before
 
-                assert unpack(await session.call_tool('gym_me'))['id'] == OWNER
+                found = unpack(await session.call_tool('gym_workout', {'workout_date': '2026-03-11'}))
+                assert found['id'] == fixture.workouts[-1]['id'] and found['date'] == '2026-03-11'
+                missing = unpack(await session.call_tool('gym_workout', {'workout_date': '2026-03-10'}))
+                assert 'error' in missing and 'Asia/Krasnoyarsk' in missing['error']
+                pages = [path for _, path, _ in fixture.requests if path.startswith('/api/workouts?')]
+                assert pages[:2] == ['/api/workouts?offset=0&limit=100', '/api/workouts?offset=100&limit=100']
+
+                records = unpack(await session.call_tool('gym_records'))
+                bench = next(r for r in records if r['exercise'] == 'Жим лёжа')
+                # Подход 150 кг отмечен разминкой; рекорд — рабочие 100 x 5 по Эпли.
+                assert (bench['weight'], bench['reps'], bench['rm'], bench['date']) == (100, 5, 116.7, '2026-03-11')
 
     assert all(auth == f'Bearer {TOKEN}' for _, _, auth in fixture.requests)
     assert all(method == 'GET' and path.startswith('/api/') for method, path, _ in fixture.requests)
     return {'result': 'PASS', 'transport': 'real stdio', 'api': 'loopback synthetic', 'tools': len(names),
-            'health_null_preserved': True, 'bad_dates_blocked': True, 'production_requests': 0}
+            'health_null_preserved': True, 'bad_dates_blocked': True, 'workout_local_date': True,
+            'workout_beyond_last_50': True, 'records_use_warmup_flag': True, 'production_requests': 0}
 
 
 def main():

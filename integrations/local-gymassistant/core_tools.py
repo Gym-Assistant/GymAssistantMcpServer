@@ -1,27 +1,95 @@
-"""Чтение профиля, тренировок, рекордов и замеров тела для локального MCP.
-
-Логика перенесена из установленного server.py без изменений поведения.
-"""
+"""Чтение профиля, тренировок, рекордов и замеров тела для локального MCP."""
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import date, datetime, timezone, tzinfo
+from http.client import HTTPException
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+
+WORKOUT_PAGE_SIZE = 100
+# Верхняя граница поиска по истории: 50 страниц по 100 тренировок.
+MAX_SCANNED_WORKOUTS = 5000
+RECORDS_WINDOW = 200
+# Эвристика разминки для старых подходов без флага isWarmup.
+WARMUP_WEIGHT_SHARE = 0.6
+WARMUP_MIN_REPS_EXCLUSIVE = 12
 
 
 def _items(response):
     return response.get('items', []) if isinstance(response, dict) else response
 
 
-def first_set_date(w: dict) -> str | None:
-    earliest = None
-    for ts in w.get('trainSessions', []):
-        for s in ts.get('sets', []):
-            ca = s.get('createdAt')
-            if ca and (earliest is None or ca < earliest):
-                earliest = ca
-    return earliest[:10] if earliest else None
+def load_workouts(api_get, max_items=MAX_SCANNED_WORKOUTS, page_size=WORKOUT_PAGE_SIZE):
+    """Тренировки страницами от новых к старым. Возвращает (список, просмотрена_вся_история)."""
+    items, offset = [], 0
+    while True:
+        limit = min(page_size, max_items - offset)
+        if limit <= 0:
+            return items, False
+        response = api_get('/workouts', {'offset': offset, 'limit': limit})
+        page = _items(response)
+        items.extend(page)
+        offset += len(page)
+        total = response.get('total') if isinstance(response, dict) else None
+        if not page or (total is not None and offset >= total) or (total is None and len(page) < limit):
+            return items, True
+
+
+def user_time_zone(api_get) -> tuple[tzinfo, str]:
+    """Часовой пояс из GET /user/settings (timeZoneId); при любой недоступности — UTC."""
+    try:
+        settings = api_get('/user/settings')
+    except (OSError, ValueError, HTTPException):
+        return timezone.utc, 'UTC'
+    name = settings.get('timeZoneId') if isinstance(settings, dict) else None
+    if not isinstance(name, str) or not name.strip():
+        return timezone.utc, 'UTC'
+    try:
+        return ZoneInfo(name.strip()), name.strip()
+    except (ZoneInfoNotFoundError, ValueError):
+        return timezone.utc, 'UTC'
+
+
+def _instant(value):
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def local_workout_date(workout: dict, tz: tzinfo = timezone.utc) -> str | None:
+    """Локальная дата тренировки YYYY-MM-DD в поясе пользователя.
+
+    Порядок: startedAt -> scheduledDateLocal (уже локальная дата) -> самый ранний
+    createdAt подхода -> createdAt тренировки. Последние два — только для старых
+    записей без startedAt; все моменты времени переводятся в пояс пользователя.
+    """
+    started = _instant(workout.get('startedAt'))
+    if started:
+        return started.astimezone(tz).date().isoformat()
+    scheduled = workout.get('scheduledDateLocal')
+    if isinstance(scheduled, str) and scheduled:
+        try:
+            return date.fromisoformat(scheduled[:10]).isoformat()
+        except ValueError:
+            pass
+    instants = [moment for session in workout.get('trainSessions') or []
+                for s in session.get('sets') or [] if (moment := _instant(s.get('createdAt')))]
+    first = min(instants, default=None) or _instant(workout.get('createdAt'))
+    return first.astimezone(tz).date().isoformat() if first else None
 
 
 def epley_1rm(weight: float, reps: int) -> float:
+    """Расчётный 1RM по формуле Эпли: вес × (1 + повторы / 30), округление до 0.1.
+
+    1 повтор — сам вес; 0 и меньше повторов — 0. Повторы сверху не ограничены,
+    поэтому оценка для многоповторных подходов грубая и может отличаться от
+    приложения (там другие ограничения формулы).
+    """
     if reps <= 0:
         return 0.0
     if reps == 1:
@@ -29,7 +97,16 @@ def epley_1rm(weight: float, reps: int) -> float:
     return round(weight * (1 + reps / 30.0), 1)
 
 
-def summarize_workout(w: dict, ex_idx: dict) -> dict:
+def is_warmup(s: dict, max_weight: float) -> bool:
+    """Флаг isWarmup подхода важнее эвристики; эвристика — только при null/отсутствии."""
+    flag = s.get('isWarmup')
+    if flag is not None:
+        return bool(flag)
+    return (max_weight > 0 and s['weight'] / max_weight < WARMUP_WEIGHT_SHARE
+            and s['reps'] > WARMUP_MIN_REPS_EXCLUSIVE)
+
+
+def summarize_workout(w: dict, ex_idx: dict, tz: tzinfo = timezone.utc) -> dict:
     sessions = w.get('trainSessions', [])
     total_sets = 0
     total_volume = 0.0
@@ -53,7 +130,7 @@ def summarize_workout(w: dict, ex_idx: dict) -> dict:
         })
     return {
         'id': w.get('id'),
-        'date': first_set_date(w),
+        'date': local_workout_date(w, tz),
         'exercises_count': len(by_ex),
         'sets_count': total_sets,
         'volume_kg': round(total_volume, 1),
@@ -61,25 +138,23 @@ def summarize_workout(w: dict, ex_idx: dict) -> dict:
     }
 
 
-def find_records(items: list[dict], ex_idx: dict, top_n: int) -> list[dict]:
-    # max weight per exercise (для warmup-detection)
+def find_records(items: list[dict], ex_idx: dict, tz: tzinfo, top_n: int) -> list[dict]:
     max_w = defaultdict(float)
     for w in items:
         for ts in w.get('trainSessions', []):
+            ex_id = ts.get('exerciseId', '')
             for s in ts.get('sets', []):
-                if s.get('isDone') and s['weight'] > max_w[ts.get('exerciseId', '')]:
-                    max_w[ts.get('exerciseId', '')] = s['weight']
+                # Отмеченная разминка не задаёт рабочий максимум для эвристики.
+                if s.get('isDone') and s.get('isWarmup') is not True and s['weight'] > max_w[ex_id]:
+                    max_w[ex_id] = s['weight']
     records = {}
     for w in items:
-        d = first_set_date(w)
+        d = local_workout_date(w, tz)
         for ts in w.get('trainSessions', []):
             ex_id = ts.get('exerciseId', '')
             ex_name = ex_idx.get(ex_id, {}).get('name', '?')
             for s in ts.get('sets', []):
-                if not s.get('isDone'):
-                    continue
-                # exclude warmup (<60% of max + >12 reps)
-                if max_w[ex_id] > 0 and (s['weight'] / max_w[ex_id]) < 0.6 and s['reps'] > 12:
+                if not s.get('isDone') or is_warmup(s, max_w[ex_id]):
                     continue
                 rm = epley_1rm(s['weight'], s['reps'])
                 cur = records.get(ex_name)
@@ -140,12 +215,13 @@ def register_core_tools(mcp, api_get, api_url):
     @mcp.tool()
     def gym_workouts(n: int = 10) -> list[dict]:
         """Последние N тренировок (свёрнуто): дата, упражнения, подходов, объём.
-        n: количество (default 10, max 50)."""
+        n: количество (default 10, max 50). Дата — локальная в часовом поясе пользователя."""
         n = max(1, min(int(n), 50))
+        tz, _ = user_time_zone(api_get)
         data = api_get('/workouts', {'offset': 0, 'limit': max(n, 30)})
         items = _items(data)
         ex_idx = exercises()
-        summaries = [summarize_workout(w, ex_idx) for w in items]
+        summaries = [summarize_workout(w, ex_idx, tz) for w in items]
         summaries = [s for s in summaries if s['sets_count'] > 0]
         summaries.sort(key=lambda s: s.get('date') or '', reverse=True)
         return summaries[:n]
@@ -153,20 +229,35 @@ def register_core_tools(mcp, api_get, api_url):
     @mcp.tool()
     def gym_workout(workout_date: str) -> dict:
         """Детальная тренировка за конкретную дату.
-        workout_date: YYYY-MM-DD."""
-        items = _items(api_get('/workouts', {'offset': 0, 'limit': 50}))
+        workout_date: YYYY-MM-DD — локальная дата в часовом поясе пользователя
+        (timeZoneId из настроек, иначе UTC). Дата тренировки берётся из startedAt,
+        затем scheduledDateLocal; поиск идёт по всей истории (до 5000 тренировок).
+        Если за дату несколько тренировок, остальные ID — в other_workout_ids."""
+        target = date.fromisoformat(workout_date)
+        if target.isoformat() != workout_date:
+            raise ValueError('Укажите дату в формате YYYY-MM-DD.')
+        tz, tz_name = user_time_zone(api_get)
+        items, complete = load_workouts(api_get)
+        matches = [w for w in items if not w.get('isDeleted') and local_workout_date(w, tz) == workout_date]
+        if not matches:
+            where = 'во всей истории' if complete else f'в последних {len(items)} тренировках'
+            return {'error': f'Не найдено за {workout_date} {where} (часовой пояс {tz_name})'}
         ex_idx = exercises()
-        for w in items:
-            if first_set_date(w) == workout_date:
-                return summarize_workout(w, ex_idx)
-        return {'error': f'Не найдено за {workout_date} в последних 50 тренировках'}
+        summaries = [summarize_workout(w, ex_idx, tz) for w in matches]
+        chosen = next((s for s in summaries if s['sets_count'] > 0), summaries[0])
+        others = [s['id'] for s in summaries if s is not chosen]
+        return {**chosen, 'other_workout_ids': others} if others else chosen
 
     @mcp.tool()
     def gym_records(top_n: int = 25) -> list[dict]:
-        """Действующие est. 1RM (по Epley), исключая разогревочные подходы.
+        """Действующие est. 1RM по упражнениям среди последних 200 тренировок.
+        Формула Эпли: вес × (1 + повторы / 30), 1 повтор — сам вес.
+        Разминка исключается по флагу подхода isWarmup; для старых подходов без
+        флага — эвристика: меньше 60% максимума упражнения и больше 12 повторов.
         top_n: количество (default 25)."""
-        data = api_get('/workouts', {'offset': 0, 'limit': 200})
-        return find_records(_items(data), exercises(), top_n)
+        tz, _ = user_time_zone(api_get)
+        data = api_get('/workouts', {'offset': 0, 'limit': RECORDS_WINDOW})
+        return find_records(_items(data), exercises(), tz, top_n)
 
     @mcp.tool()
     def gym_body_latest() -> list[dict]:
