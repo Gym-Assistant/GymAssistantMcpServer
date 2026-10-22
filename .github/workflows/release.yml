@@ -24,6 +24,7 @@ jobs:
 
       - uses: ./.github/actions/runner-environment
         with:
+          runner-mode: ${{ vars.CI_RUNNER_MODE }}
           docker: 'true'
 
       - uses: docker/setup-qemu-action@v3

@@ -1,6 +1,9 @@
 name: Prepare isolated runner environment
 description: Validate the trusted local runner and isolate Docker credentials from the workstation.
 inputs:
+  runner-mode:
+    description: Runner mode supplied by the calling workflow.
+    default: hosted
   docker:
     description: Prepare the local Linux Docker daemon and a temporary client configuration.
     default: 'false'
@@ -10,7 +13,7 @@ runs:
     - name: Validate runner and isolate Docker configuration
       shell: bash
       env:
-        GA_RUNNER_MODE: ${{ vars.CI_RUNNER_MODE }}
+        GA_RUNNER_MODE: ${{ inputs.runner-mode }}
         GA_REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
         GA_EVENT_NAME: ${{ github.event_name }}
         GA_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}

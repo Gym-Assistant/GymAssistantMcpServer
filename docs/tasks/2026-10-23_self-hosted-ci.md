@@ -27,7 +27,7 @@
 - `bash -n`, `shellcheck`, разбор трёх YAML и `git diff --check` — **PASS**.
 - Реальный Docker Desktop preflight с временным `DOCKER_CONFIG`: Linux daemon и Buildx доступны; SHA личного `~/.docker/config.json` не изменился, auths/credsStore не скопированы. Временная директория удалена.
 - Первый [Actions run 39823400125](https://github.com/Gym-Assistant/GymAssistantMcpServer/actions/runs/39823400125) завершился `skipped`: все три задания были остановлены guard до запуска на Mac, поскольку API GitHub подтвердил `private=false`. Это ожидаемая защита, не успешная сборка.
-- После смены `CI_RUNNER_MODE=hosted` выполняется повторная проверка PR12 на стандартном GitHub-hosted runner. Успех этой проверки фиксируется отдельно; данный коммит его ещё не подтверждает.
+- После смены `CI_RUNNER_MODE=hosted` run 39823746550 фактически назначен стандартным `ubuntu-latest`. Он обнаружил ограничение GitHub composite actions: контекст `vars` там недоступен. Режим теперь передаётся явным input из workflow; shell-защита сохраняется. Повторная проверка PR12 выполняется после исправления, её успех этим коммитом ещё не объявляется.
 
 ## Ручная настройка
 
