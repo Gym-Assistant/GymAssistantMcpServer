@@ -42,7 +42,7 @@ public static class PlanTools
         => client.DeletePlanAsync(id, ct);
 
     [McpServerTool(Name = "list_plan_catalog", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Каталог опубликованных тренировочных планов (доступных для форка) с пагинацией и текстовым поиском. Scope: plans:read.")]
+     Description("Каталог опубликованных тренировочных планов (доступных для форка) с пагинацией и текстовым поиском. Scope не нужен: достаточно любого действующего PAT.")]
     public static Task<PlanViewModelPaged> ListPlanCatalogAsync(
         GymClient client,
         CancellationToken ct,
@@ -52,7 +52,7 @@ public static class PlanTools
         => client.GetPlanCatalogAsync(offset, limit, search!, ct);
 
     [McpServerTool(Name = "get_plan_from_catalog", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Получить опубликованный план из каталога по его id (без форка — только просмотр). Scope: plans:read.")]
+     Description("Получить опубликованный план из каталога по его id (без форка — только просмотр). Scope не нужен: достаточно любого действующего PAT.")]
     public static Task<PlanViewModel> GetPlanFromCatalogAsync(
         GymClient client,
         [Description("ID плана в каталоге")] Guid id,
@@ -84,7 +84,8 @@ public static class PlanTools
         => client.UnpublishPlanAsync(id, ct);
 
     [McpServerTool(Name = "check_plan_updates", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Проверить наличие обновлений для форка плана — HTTP 200, если у исходного плана появилась новая ревизия (тело клиент не возвращает). Scope: plans:read.")]
+     Description("Проверить наличие обновлений для форка плана. Ограничение: backend отвечает {hasUpdate, latestRevision} без типизированной схемы, поэтому клиент GymAssistant.Client возвращает void и MCP отдаёт только факт успешного вызова. " +
+                 "Пока backend не объявит тип ответа, сравни ForkedFromRevision форка (get_plan) с Revision исходного плана (get_plan_from_catalog, если он опубликован). Scope: plans:read.")]
     public static Task CheckPlanUpdatesAsync(
         GymClient client,
         [Description("ID собственного форкнутого плана, для которого проверяются обновления")] Guid id,

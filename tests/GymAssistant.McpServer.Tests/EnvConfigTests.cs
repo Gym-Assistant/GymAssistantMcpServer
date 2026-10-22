@@ -38,7 +38,9 @@ public class EnvConfigTests
     public void Build_MissingToken_Throws()
     {
         var env = new Dictionary<string, string?>();
-        Assert.Throws<InvalidOperationException>(() => EnvConfig.Build(env.GetValueOrDefault));
+        var error = Assert.Throws<InvalidOperationException>(() => EnvConfig.Build(env.GetValueOrDefault));
+        Assert.Contains("Settings -> API tokens", error.Message);
+        Assert.DoesNotContain("Telegram", error.Message);
     }
 
     [Theory]

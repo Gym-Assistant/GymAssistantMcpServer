@@ -22,7 +22,7 @@ Rules for AI coding agents working in this repo.
 - .NET 10, nullable enabled, implicit usings.
 - Each tool method has `[McpServerTool(Name = "...")]` and `[Description("...")]`.
 - Tool names: `snake_case`, no `gym_` prefix (MCP client adds server-name prefix automatically).
-- Tool descriptions: Russian short description + key English API terms in parentheses if applicable. Mention required scope.
+- Tool descriptions: Russian short description + key English API terms in parentheses if applicable. State the access the backend actually enforces: `Scope: <scope>.` for `RequireScope` routes, or the fixed phrases from `tests/.../ToolAccessContractTests.cs` for anonymous and authentication-only catalogs. Update that test's route/scope mapping (taken from GymBackendV2 `Program.cs`) whenever a tool or backend route changes.
 - DTO and method names from `GymAssistant.Client` come from NSwag — don't rename, follow whatever the generated client exposes.
 - The NSwag client class is `GymAssistant.Client.Client`, aliased project-wide as `GymClient` (via `<Using Alias>` in csproj).
 

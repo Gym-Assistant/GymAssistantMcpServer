@@ -26,7 +26,7 @@ public static class BodyTools
         => client.GetBodyCharacteristicsWithLatestAsync(asOf, ct);
 
     [McpServerTool(Name = "list_default_body_characteristics", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Глобальный справочник стандартных характеристик тела (вес, рост, талия и пр.), которые можно подключить пользователю. Scope: body:read.")]
+     Description("Глобальный справочник стандартных характеристик тела (вес, рост, талия и пр.), которые можно подключить пользователю. Scope не нужен: публичный справочник, backend не требует авторизации.")]
     public static Task<ICollection<BodyDefaultCharacteristicViewModel>> ListDefaultBodyCharacteristicsAsync(
         GymClient client,
         CancellationToken ct)

@@ -25,13 +25,14 @@ public static class WorkoutTools
         => client.GetWorkoutByIdAsync(id, ct);
 
     [McpServerTool(Name = "get_workouts_report", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Сводный отчёт по тренировкам пользователя за период (HTTP 200 при успехе; тело — экспортируемый отчёт, MCP его не возвращает). Scope: workouts:read.")]
+     Description("Экспорт отчёта по тренировкам за период. Ограничение: backend отдаёт файл (txt или Excel) без типизированной схемы ответа, поэтому клиент GymAssistant.Client возвращает void и MCP не возвращает содержимое — только факт успешного вызова. " +
+                 "Для анализа используй list_workouts и get_workout. Scope: workouts:read.")]
     public static Task GetWorkoutsReportAsync(
         GymClient client,
         CancellationToken ct,
         [Description("Начало периода (ISO 8601); null — без нижней границы")] DateTimeOffset? from = null,
         [Description("Конец периода (ISO 8601); null — без верхней границы")] DateTimeOffset? to = null,
-        [Description("Формат экспорта (например, json/csv); null — по умолчанию сервера")] string? format = null)
+        [Description("Формат файла: txt; любое другое значение или null — Excel")] string? format = null)
         => client.ExportWorkoutsReportAsync(from, to, format!, ct);
 
     [McpServerTool(Name = "create_workout", Destructive = true),
