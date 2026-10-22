@@ -26,7 +26,7 @@ BENCH = '22222222-2222-4222-8222-222222222222'
 EXPECTED_TOOLS = {
     'gym_me', 'gym_workouts', 'gym_workout', 'gym_records', 'gym_body_latest',
     'gym_body_history', 'gym_status', 'gym_health_daily', 'gym_health_metrics',
-    'gym_plans', 'gym_plan', 'gym_exercises', 'gym_create_plan', 'gym_append_plan_days',
+    'gym_plans', 'gym_plan', 'gym_exercises', 'gym_create_plan', 'gym_append_plan_days', 'gym_default_exercise',
 }
 HEALTH = [{'snapshot': {'day': '2026-10-17', 'timeZone': 'Asia/Krasnoyarsk', 'readAt': '2026-10-17T12:00:00Z',
                         'values': {'steps': 1234, 'protein': None}},

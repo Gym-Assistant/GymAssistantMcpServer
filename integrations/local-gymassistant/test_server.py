@@ -10,7 +10,7 @@ import server
 EXPECTED_TOOLS = {
     'gym_me', 'gym_workouts', 'gym_workout', 'gym_records', 'gym_body_latest',
     'gym_body_history', 'gym_status', 'gym_health_daily', 'gym_health_metrics',
-    'gym_plans', 'gym_plan', 'gym_exercises', 'gym_create_plan', 'gym_append_plan_days',
+    'gym_plans', 'gym_plan', 'gym_exercises', 'gym_create_plan', 'gym_append_plan_days', 'gym_default_exercise',
 }
 
 
@@ -68,7 +68,7 @@ class BuildServerTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             server.build_server({'GYM_API_URL': 'http://127.0.0.1:1/api'})
 
-    def test_registers_all_fourteen_tools(self):
+    def test_registers_all_fifteen_tools(self):
         mcp = server.build_server({'GYM_API_TOKEN': 'gma_fixture', 'GYM_API_URL': 'http://127.0.0.1:1/api/'})
         names = {tool.name for tool in asyncio.run(mcp.list_tools())}
         self.assertEqual(names, EXPECTED_TOOLS)

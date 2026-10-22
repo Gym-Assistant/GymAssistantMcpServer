@@ -236,14 +236,33 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
     @mcp.tool(annotations=read)
     def gym_exercises(source: Literal['personal', 'default'] = 'personal',
                       offset: Annotated[int, Field(ge=0)] = 0,
-                      limit: Annotated[int, Field(ge=1, le=100)] = 50) -> dict:
-        """Упражнения с настоящими ID для плана. Scope: exercises:read.
+                      limit: Annotated[int, Field(ge=1, le=100)] = 50,
+                      include_hidden: bool = False) -> dict:
+        """Упражнения с ID и метаданными. personal требует exercises:read; default публичный.
 
         personal — личные упражнения, default — общий каталог. Не выдумывай ID.
         Для плана предпочитай личный вариант пользователя; листай offset/limit.
+        include_hidden допустим только для default: включает скрытые шаблоны для
+        восстановления ссылок истории. По умолчанию новые планы используют видимый каталог.
+        Поля groupCode, nameEn, aliasesEn, media, loadConvention, isUnilateral и
+        muscles.role передаются без преобразования. canonicalId не переназначает личные ID.
         """
+        if source == 'personal' and include_hidden:
+            raise ValueError('include_hidden доступен только для общего каталога (source=default).')
         path = '/exercises' if source == 'personal' else '/exercises/defaults'
-        return api_get(path, {'offset': offset, 'limit': limit})
+        params = {'offset': offset, 'limit': limit}
+        if include_hidden:
+            params['includeHidden'] = 'true'
+        return api_get(path, params)
+
+    @mcp.tool(annotations=read)
+    def gym_default_exercise(global_id: UUID) -> dict:
+        """Общий шаблон по реальному globalId, включая скрытый. Публичный справочник.
+
+        Для разбора старых планов/истории, если шаблон отсутствует в обычном списке.
+        Сохраняет метаданные, isHidden и canonicalId; ничего не перепривязывает.
+        """
+        return api_get('/exercises/defaults/' + str(global_id))
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False))
     def gym_create_plan(name: Annotated[str, Field(min_length=1)],

@@ -59,6 +59,7 @@ public sealed class ToolAccessContractTests
 
             ["list_exercises"] = ("GET /api/exercises", "exercises:read"),
             ["list_default_exercises"] = ("GET /api/exercises/defaults", Anonymous),
+            ["get_default_exercise"] = ("GET /api/exercises/defaults/{globalId}", Anonymous),
             ["list_exercise_catalogs"] = ("GET /api/exercises/catalogs", Anonymous),
             ["list_muscles"] = ("GET /api/muscles", Authenticated),
             ["list_equipment"] = ("GET /api/equipment", Authenticated),
@@ -95,9 +96,9 @@ public sealed class ToolAccessContractTests
             .ToDictionary(m => m.GetCustomAttribute<McpServerToolAttribute>()!.Name ?? m.Name);
 
     [Fact]
-    public void Every_tool_has_a_backend_mapping_and_there_are_43()
+    public void Every_tool_has_a_backend_mapping_and_there_are_44()
     {
-        Assert.Equal(43, Tools.Count);
+        Assert.Equal(44, Tools.Count);
         Assert.Equal(Backend.Keys.Order(), Tools.Keys.Order());
     }
 
@@ -156,7 +157,7 @@ public sealed class ToolAccessContractTests
             // Пустой синтетический ответ может не десериализоваться: проверяется только запрос.
         }
         var request = Assert.Single(handler.Requests);
-        Assert.Equal(Backend[tool].Route, request);
+        Assert.Equal(Backend[tool].Route.Replace("{globalId}", "{id}"), request);
     }
 
     private static object? Argument(ParameterInfo parameter, GymClient client)

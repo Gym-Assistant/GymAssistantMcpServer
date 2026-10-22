@@ -1,11 +1,11 @@
 """Локальный MCP GymAssistant: чтение данных, Apple Health и создание/дополнение планов.
 
-Инструменты (14):
+Инструменты (15):
 - core_tools.py:   gym_me, gym_workouts, gym_workout, gym_records,
                    gym_body_latest, gym_body_history, gym_status;
 - health_tools.py: gym_health_daily, gym_health_metrics;
 - plan_tools.py:   gym_plans, gym_plan, gym_exercises, gym_create_plan,
-                   gym_append_plan_days.
+                   gym_append_plan_days, gym_default_exercise.
 
 Конфигурация (переменные процесса важнее значений из env-файла):
 - GYM_API_TOKEN — обязательный Personal API Token (gma_...);

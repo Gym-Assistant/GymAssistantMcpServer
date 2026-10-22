@@ -65,6 +65,9 @@ class PlanToolsTests(unittest.TestCase):
         self.calls.append((path, params))
         if path == '/auth/me':
             return {'id': OWNER}
+        if path.startswith('/exercises/defaults/'):
+            return copy.deepcopy(next(item for item in self.data['/exercises/defaults']
+                                      if item['globalId'] == path.rsplit('/', 1)[1]))
         if path.startswith('/plans/'):
             plan_id = path.removeprefix('/plans/')
             if plan_id not in self.by_id:
@@ -305,9 +308,36 @@ class PlanToolsTests(unittest.TestCase):
         self.assertFalse(create.annotations.readOnlyHint)
         self.assertFalse(create.annotations.destructiveHint)
         self.assertFalse(create.annotations.idempotentHint)
-        for name in ['gym_plans', 'gym_plan', 'gym_exercises']:
+        for name in ['gym_plans', 'gym_plan', 'gym_exercises', 'gym_default_exercise']:
             self.assertTrue(tools[name].annotations.readOnlyHint)
         self.assertEqual(self.calls, [])
+
+    def test_catalog_read_preserves_metadata_and_hidden_identity(self):
+        item = self.data['/exercises/defaults'][0]
+        item.update({'nameEn': 'Pull-up', 'descriptionEn': 'Controlled movement',
+                     'aliasesEn': ['Pull up'], 'groupCode': 'back', 'loadConvention': 'total',
+                     'isUnilateral': False, 'isHidden': True, 'canonicalId': GLOBAL,
+                     'muscles': [{'muscleCode': 'lats', 'role': 'primary', 'loadPercent': 70}],
+                     'media': [{'kind': 'image', 'url': 'https://example.invalid/pull-up.webp',
+                                'frames': ['https://example.invalid/pull-up-start.webp']}],
+                     'futureMetadata': {'retain': True}})
+        result = self.registry.functions['gym_exercises'](source='default', include_hidden=True)
+        self.assertEqual(result['items'][0], item)
+        self.assertEqual(self.calls[-1], ('/exercises/defaults',
+                                         {'offset': 0, 'limit': 50, 'includeHidden': 'true'}))
+        result = self.registry.functions['gym_default_exercise'](UUID(DEFAULT))
+        self.assertEqual(result, item)
+        self.assertEqual(self.calls[-1], ('/exercises/defaults/' + DEFAULT, None))
+        self.assertEqual(result['globalId'], DEFAULT)
+        self.assertEqual(self.posts, [])
+
+    def test_catalog_default_call_remains_compatible_and_hidden_option_is_not_ignored(self):
+        self.registry.functions['gym_exercises']()
+        self.assertEqual(self.calls, [('/exercises', {'offset': 0, 'limit': 50})])
+        with self.assertRaisesRegex(ValueError, 'include_hidden'):
+            self.registry.functions['gym_exercises'](source='personal', include_hidden=True)
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.posts, [])
 
 
 class PlanWriterTests(unittest.TestCase):

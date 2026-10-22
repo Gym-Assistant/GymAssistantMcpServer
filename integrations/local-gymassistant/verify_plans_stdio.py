@@ -31,6 +31,11 @@ TOKEN = 'gma_synthetic_fixture_only'
 OWNER = '11111111-1111-4111-8111-111111111111'
 PERSONAL = '22222222-2222-4222-8222-222222222222'
 DEFAULT = '33333333-3333-4333-8333-333333333333'
+HIDDEN = {'globalId': '44444444-4444-4444-8444-444444444444', 'name': 'Архивный шаблон',
+          'isHidden': True, 'canonicalId': DEFAULT, 'nameEn': 'Archived template',
+          'groupCode': 'back', 'loadConvention': 'per_side', 'isUnilateral': True,
+          'aliasesEn': ['Alternate name'], 'muscles': [{'muscleCode': 'lats', 'loadPercent': 70, 'role': 'primary'}],
+          'media': [{'kind': 'image', 'url': 'https://example.invalid/exercise.webp'}]}
 STRANGER = '55555555-5555-4555-8555-555555555555'
 FOREIGN_PLAN = '66666666-6666-4666-8666-666666666666'
 EXISTING = {
@@ -38,7 +43,7 @@ EXISTING = {
     'gym_body_history', 'gym_status', 'gym_health_daily', 'gym_health_metrics',
 }
 CREATION_TOOLS = {'gym_plans', 'gym_plan', 'gym_exercises', 'gym_create_plan'}
-ADDED = CREATION_TOOLS | {'gym_append_plan_days'}
+ADDED = CREATION_TOOLS | {'gym_append_plan_days', 'gym_default_exercise'}
 HEALTH = [{
     'snapshot': {
         'day': '2026-10-20', 'timeZone': 'Asia/Krasnoyarsk',
@@ -114,8 +119,12 @@ class Fixture:
                         '/api/exercises/defaults': [{'globalId': DEFAULT, 'name': 'Базовое упражнение'}],
                         '/api/plans': fixture.plans,
                     }[parsed.path]
+                    if parsed.path == '/api/exercises/defaults' and query.get('includeHidden') == ['true']:
+                        items = items + [HIDDEN]
                     offset, limit = int(query.get('offset', [0])[0]), int(query.get('limit', [100])[0])
                     result = {'items': items[offset:offset + limit], 'total': len(items)}
+                elif parsed.path == '/api/exercises/defaults/' + HIDDEN['globalId']:
+                    result = HIDDEN
                 elif parsed.path.startswith('/api/plans/') and parsed.path.count('/') == 3:
                     plan_id = parsed.path.rsplit('/', 1)[1]
                     by_id = {plan['id']: plan for plan in fixture.plans} | fixture.foreign
@@ -269,7 +278,7 @@ async def verify(server_path, port, fixture, error_log):
     async with connection(server_path, port, error_log) as session:
         listed = {tool.name: tool.model_dump() for tool in (await session.list_tools()).tools}
         assert set(listed) == EXISTING | ADDED
-        for name in ('gym_plans', 'gym_plan', 'gym_exercises', 'gym_health_daily', 'gym_health_metrics'):
+        for name in ('gym_plans', 'gym_plan', 'gym_exercises', 'gym_default_exercise', 'gym_health_daily', 'gym_health_metrics'):
             assert listed[name]['annotations']['readOnlyHint'] is True
         health_before = unpack(await session.call_tool('gym_health_daily', {
             'from_date': '2026-10-20', 'to_date': '2026-10-20'}))
@@ -285,6 +294,9 @@ async def verify(server_path, port, fixture, error_log):
         assert schema['$defs']['PlanExercise']['additionalProperties'] is False
         assert unpack(await session.call_tool('gym_exercises'))['items'][0]['id'] == PERSONAL
         assert unpack(await session.call_tool('gym_exercises', {'source': 'default'}))['items'][0]['globalId'] == DEFAULT
+        catalog = unpack(await session.call_tool('gym_exercises', {'source': 'default', 'include_hidden': True}))
+        assert catalog['total'] == 2 and catalog['items'][1] == HIDDEN
+        assert unpack(await session.call_tool('gym_default_exercise', {'global_id': HIDDEN['globalId']})) == HIDDEN
         assert unpack(await session.call_tool('gym_plans'))['items'] == []
 
         request = {

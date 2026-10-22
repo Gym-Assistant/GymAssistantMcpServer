@@ -4,7 +4,7 @@
 
 | Файл | Назначение |
 |---|---|
-| `server.py` | конфигурация, HTTP-чтение, регистрация 14 инструментов |
+| `server.py` | конфигурация, HTTP-чтение, регистрация 15 инструментов |
 | `core_tools.py` | `gym_me`, `gym_workouts`, `gym_workout`, `gym_records`, `gym_body_latest`, `gym_body_history`, `gym_status` |
 | `health_tools.py` | `gym_health_daily`, `gym_health_metrics` |
 | `plan_tools.py` | `gym_plans`, `gym_plan`, `gym_exercises`, `gym_create_plan`, `gym_append_plan_days` |
@@ -125,3 +125,16 @@ python integrations/local-gymassistant/verify_plans_stdio.py
 Имена и параметры 14 инструментов сохранены. Прежний `install_plans.py` оставлен
 как совместимый частичный установщик для старого монолитного сервера; для новой
 воспроизводимой установки используется `install.py`. Ключи и `run.sh` не меняются.
+
+## Метаданные и скрытые шаблоны
+
+`gym_exercises(source="default", include_hidden=True)` включает скрытые шаблоны
+для разбора истории; обычный вызов показывает только доступный каталог.
+`gym_default_exercise(global_id)` читает общий шаблон по настоящему ID, включая
+скрытый. Для source="personal" флаг include_hidden не применяется и вызывает
+понятную ошибку. Личные упражнения сохраняют прежние ID.
+
+Новые поля (`groupCode`, `nameEn`, `descriptionEn`, `aliasesEn`, `media`,
+`loadConvention`, `isUnilateral`, `muscles.role`, `isHidden`, `canonicalId`)
+передаются из API целиком, без переименования и переназначения ссылок.
+Количество инструментов — 15; все прежние 14 имён и параметры совместимы.

@@ -28,6 +28,19 @@
 - Docker build локального `gymassistant/mcp-server:ga043-integrated` и настоящий stdio этого образа: PASS. Только BuildKit secrets, без записи ключей в репозиторий/образ.
 - Production API не использовался для тестов. Рабочие ключи, права, данные и runtime Mentoru не менялись.
 
-## Следующий шаг
+## Подготовка перед расширением метаданных
 
 После проверенного backend release обновить NuGet на опубликованный аддитивный контракт метаданных, добавить thin чтение шаблона по ID/includeHidden и повторить .NET/stdio проверки. До этого PR остаётся draft; образ не публикуется. Перед будущим обновлением локального Python MCP сохранить backup и действующий путь env-файла через GYM_MCP_ENV_FILE: новый сервер больше не содержит личный hardcoded путь. Переподключение MCP требуется отдельно от публикации образа.
+
+## Контракт метаданных после backend0.18.0
+
+- Backend0.18.0 выпущен [workflow39781074992](https://github.com/Gym-Assistant/GymBackendV2/actions/runs/39781074992), с backup/restore/protected-copy и неизменностью истории. [Клиент0.17.0](https://github.com/Gym-Assistant/GymBackendV2/actions/runs/39782758623) сгенерирован из фактически работающего API через SSH loopback; пакет подтверждён GitHub Packages.
+- .NET зависимость обновлена0.16.0→0.17.0, оба lockfile пересозданы. Новые nullable metadata/role/media передаются тонкими инструментами без собственного пересчёта.
+- `list_default_exercises` добавляет includeHidden=false; новый `get_default_exercise` читает скрытый шаблон по globalId. Итого44 .NET инструмента. CanonicalId не переназначает ссылки и не удаляет личные упражнения.
+- Python сохраняет новые и неизвестные metadata как rawJSON. `gym_exercises` добавляет совместимый include_hidden=False, допустимый только для source=default; новый `gym_default_exercise` читает по настоящему ID. Итого15 инструментов. Создание планов по умолчанию использует видимый каталог.
+- .NET114/114, Python83/83, настоящий .NETstdio44 и Pythonstdio15: PASS. Проверены includeHidden query, скрытый read-by-ID, metadata/media/role roundtrip, отсутствие записи при чтении, прежние typed create/append/read и Health. Логи `/tmp/ga043-mcp-metadata-{dotnet,dotnet-stdio,python,stdio-python,plans-stdio}.log`.
+- В действующем локальном MCP server.py читает vault.env по прежнему hardcoded пути; run.sh пока не задаёт GYM_MCP_ENV_FILE. При установке нового runtime сначала сохранить резервную копию, затем явно указать тот же путь в wrapper с приоритетом существующей переменной процесса. Содержимое .env/ключи не копировать и не изменять.
+
+## Осталось для выпуска
+
+Дождаться Docker/CI, объединить PR9 и опубликовать следующий MINOR v0.4.0 (remote tags проверены, последний v0.3.0). После проверки образа обновить локальный runtime с резервной копией, проверить synthetic stdio и доступные readonly маршруты без тестовых записей. Активные MCP-сессии должны переподключиться отдельно.

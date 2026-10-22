@@ -2,7 +2,7 @@
 
 MCP-сервер, который даёт твоему Claude/Cursor/Codex доступ к твоим данным [GymAssistant](https://gym-assistant.ru) через Model Context Protocol.
 
-43 инструмента — read и write по тренировкам, замерам тела, упражнениям, планам и Apple Health. Авторизация — через **Personal API Token** (PAT) с гранулярными scope'ами.
+44 инструмента — read и write по тренировкам, замерам тела, упражнениям, планам и Apple Health. Авторизация — через **Personal API Token** (PAT) с гранулярными scope'ами.
 
 ## Установка
 
@@ -47,14 +47,14 @@ claude mcp add gymassistant -- docker run -i --rm \
 
 ## Что умеют тулзы
 
-43 инструмента в 7 группах:
+44 инструмента в 7 группах:
 
 | Группа | Read тулзы | Write тулзы |
 |---|---|---|
 | Profile | `get_me`, `get_user_settings`, `get_active_plan` | `update_user_settings`, `set_active_plan` |
 | Body | `list_body_characteristics`, `list_body_characteristics_with_latest`, `list_default_body_characteristics`, `get_body_characteristic`, `list_body_stamps` | `create_body_characteristic`, `delete_body_characteristic`, `create_body_stamps`, `delete_body_stamp` |
 | Workouts | `list_workouts`, `get_workout`, `get_workouts_report` | `create_workout`, `update_set`, `delete_workout` |
-| Exercises | `list_exercises`, `list_default_exercises`, `list_exercise_catalogs`, `list_muscles`, `list_equipment` | `create_exercise`, `delete_exercise` |
+| Exercises | `list_exercises`, `list_default_exercises`, `get_default_exercise`, `list_exercise_catalogs`, `list_muscles`, `list_equipment` | `create_exercise`, `delete_exercise` |
 | Plans | `list_plans`, `get_plan`, `list_plan_catalog`, `get_plan_from_catalog`, `check_plan_updates` | `create_plan`, `append_plan_days`, `delete_plan`, `fork_plan`, `publish_plan`, `unpublish_plan`, `pull_plan_updates`, `detach_plan` |
 | Apple Health | `get_apple_health_daily`, `get_apple_health_metrics` (право `health:read`) | — |
 | Diagnostics | `health_check` | — |
@@ -66,7 +66,7 @@ claude mcp add gymassistant -- docker run -i --rm \
 Описание каждого инструмента называет ровно то право, которое проверяет backend (тест `ToolAccessContractTests`):
 
 - `Scope: <право>` — маршрут с `RequireScope`, например `plans:read`, `body:write`, `health:read`;
-- без scope и без авторизации — публичные справочники `list_default_exercises`, `list_exercise_catalogs`, `list_default_body_characteristics`;
+- без scope и без авторизации — публичные справочники `list_default_exercises`, `get_default_exercise`, `list_exercise_catalogs`, `list_default_body_characteristics`;
 - без scope, но с любым действующим PAT — `list_muscles`, `list_equipment`, `list_plan_catalog`, `get_plan_from_catalog`.
 
 ### Известные ограничения
@@ -91,7 +91,7 @@ claude mcp add gymassistant -- docker run -i --rm \
 
 - .NET 10
 - `ModelContextProtocol` 1.3.x
-- `GymAssistant.Client` 0.16.0 (NSwag-сгенерированный клиент)
+- `GymAssistant.Client` 0.17.0 (NSwag-сгенерированный клиент)
 - Сервер совместим с любым MCP-клиентом, поддерживающим stdio-транспорт
 
 ## Лицензия
@@ -100,7 +100,7 @@ MIT — см. [LICENSE](LICENSE).
 
 ### Измерения подходов и дополнение планов
 
-Контракт клиента 0.16.0 передаёт `TrackingType`, `Measurement` и `ParentCode`.
+Контракт клиента 0.17.0 передаёт `TrackingType`, `Measurement` и `ParentCode`.
 Время хранится в секундах, дистанция — в метрах, помощь — в килограммах.
 Наличие `Measurement` у конкретного подхода определяет его формат; старые
 `Reps`/`Weight` без этого поля сохраняют прежний смысл.
@@ -113,3 +113,14 @@ MIT — см. [LICENSE](LICENSE).
 Локальная Python-интеграция Mentoru описана отдельно в
 [integrations/local-gymassistant](integrations/local-gymassistant/README.md).
 Обновление файлов требует переподключения уже запущенного MCP-клиента.
+
+## Метаданные каталога
+
+Клиент 0.17.0 добавляет `GroupCode`, английские названия/описания/алиасы, `Media`,
+`LoadConvention`, `IsUnilateral` и роли мышц. Значения передаются без пересчёта
+исторических подходов. Для личного упражнения сохраняется его собственный ID.
+
+`list_default_exercises(includeHidden: true)` включает скрытые общие шаблоны;
+по умолчанию список и поиск их исключают. `get_default_exercise(globalId)` читает
+шаблон по ID, даже если он скрыт. `CanonicalId` — справочная связь, инструмент
+ничего не перепривязывает и не удаляет. Оба маршрута публичны.
