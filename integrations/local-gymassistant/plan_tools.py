@@ -111,6 +111,38 @@ def _all(api_get, path):
             return
 
 
+def _owner(api_get):
+    return str(UUID(api_get('/auth/me')['id']))
+
+
+def _owned_plan(api_get, plan_id, owner):
+    """GET /plans/{id} с проверкой автора.
+
+    Маршрут по ID на старых и новых backend не фильтрует владельца, поэтому
+    автор сверяется здесь. 404, чужой или удалённый план — одинаково «не найден».
+    """
+    not_found = 'Личный план с таким ID не найден.'
+    plan_id = str(UUID(str(plan_id)))
+    try:
+        plan = api_get(f'/plans/{plan_id}')
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            e.close()
+            raise ValueError(not_found) from None
+        raise
+    if (not isinstance(plan, dict) or plan.get('isDeleted')
+            or not _same_id(plan.get('id'), plan_id) or not _same_id(plan.get('authorUserId'), owner)):
+        raise ValueError(not_found)
+    return plan
+
+
+def _same_id(value, expected):
+    try:
+        return str(UUID(str(value))) == expected
+    except ValueError:
+        return False
+
+
 def make_plan_writer(api_url, token):
     """Один POST без повторов: повтор после таймаута может создать лишний план."""
     def post(body):
@@ -195,11 +227,11 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
 
     @mcp.tool(annotations=read)
     def gym_plan(plan_id: UUID) -> dict:
-        """Полный личный план по ID. Scope: plans:read. Чужие планы не возвращаются."""
-        for plan in _all(api_get, '/plans'):
-            if plan.get('id') == str(plan_id) and not plan.get('isDeleted'):
-                return plan
-        raise ValueError('Личный план с таким ID не найден.')
+        """Полный личный план по ID. Scopes: plans:read, profile:read.
+
+        Чужие и удалённые планы не возвращаются: автор плана сверяется с /auth/me.
+        """
+        return _owned_plan(api_get, plan_id, _owner(api_get))
 
     @mcp.tool(annotations=read)
     def gym_exercises(source: Literal['personal', 'default'] = 'personal',
@@ -242,7 +274,7 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
             raise ValueError('Добавьте хотя бы один день.')
         indexes = _exercise_indexes(api_get, days)
 
-        owner = str(UUID(api_get('/auth/me')['id']))
+        owner = _owner(api_get)
         now = datetime.now(timezone.utc).isoformat()
         audit = {'createdById': owner, 'createdAt': now, 'updatedAt': now}
         plan_id = str(uuid4())
@@ -288,10 +320,8 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
         if not days:
             raise ValueError('Добавьте хотя бы один новый день.')
         expected = _timestamp(expected_updated_at)
-        owner = str(UUID(api_get('/auth/me')['id']))
-        original = gym_plan(plan_id)
-        if original.get('authorUserId') != owner:
-            raise ValueError('Можно дополнять только собственный план.')
+        owner = _owner(api_get)
+        original = _owned_plan(api_get, plan_id, owner)
         if _timestamp(original['updatedAt']) != expected:
             raise ValueError('План изменился. Перечитайте gym_plan перед добавлением дней.')
         indexes = _exercise_indexes(api_get, days)

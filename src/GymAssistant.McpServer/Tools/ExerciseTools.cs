@@ -17,7 +17,7 @@ public static class ExerciseTools
         => client.GetUserExercisesAsync(offset, limit, null, null, ct);
 
     [McpServerTool(Name = "list_default_exercises", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Глобальный каталог дефолтных упражнений (с поиском и фильтрами по мышце/оборудованию) с пагинацией. Scope: exercises:read.")]
+     Description("Глобальный каталог дефолтных упражнений (с поиском и фильтрами по мышце/оборудованию) с пагинацией. Scope не нужен: публичный справочник, backend не требует авторизации.")]
     public static Task<ExerciseDefaultViewModelPaged> ListDefaultExercisesAsync(
         GymClient client,
         CancellationToken ct,
@@ -29,21 +29,21 @@ public static class ExerciseTools
         => client.GetDefaultExercisesAsync(offset, limit, search!, muscleCode!, equipmentCode!, ct);
 
     [McpServerTool(Name = "list_exercise_catalogs", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Справочники для упражнений (Muscles + Equipments) одним вызовом — для построения фильтров и UI. Scope: exercises:read.")]
+     Description("Справочники для упражнений (Muscles + Equipments) одним вызовом — для построения фильтров и UI. Устаревший маршрут backend: предпочитай list_muscles и list_equipment. Scope не нужен: публичный справочник, backend не требует авторизации.")]
     public static Task<ExerciseCatalogsViewModel> ListExerciseCatalogsAsync(
         GymClient client,
         CancellationToken ct)
         => client.GetExerciseCatalogsAsync(ct);
 
     [McpServerTool(Name = "list_muscles", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Справочник мышц (ExerciseCatalogItemViewModel: Code, Name, ParentCode и пр.) для назначения нагрузок на упражнения. Scope: exercises:read.")]
+     Description("Справочник мышц (ExerciseCatalogItemViewModel: Code, Name, ParentCode и пр.) для назначения нагрузок на упражнения. Scope не нужен: достаточно любого действующего PAT.")]
     public static Task<ICollection<ExerciseCatalogItemViewModel>> ListMusclesAsync(
         GymClient client,
         CancellationToken ct)
         => client.GetMusclesAsync(ct);
 
     [McpServerTool(Name = "list_equipment", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Справочник оборудования (ExerciseCatalogItemViewModel: Code, Name, ParentCode и пр.) для привязки к упражнениям. Scope: exercises:read.")]
+     Description("Справочник оборудования (ExerciseCatalogItemViewModel: Code, Name, ParentCode и пр.) для привязки к упражнениям. Scope не нужен: достаточно любого действующего PAT.")]
     public static Task<ICollection<ExerciseCatalogItemViewModel>> ListEquipmentAsync(
         GymClient client,
         CancellationToken ct)

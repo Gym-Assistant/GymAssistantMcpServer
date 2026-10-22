@@ -13,7 +13,7 @@ public sealed record EnvConfig(string ApiToken, Uri ApiUrl, string LogLevel)
         var token = read("GYM_API_TOKEN");
         if (string.IsNullOrWhiteSpace(token))
             throw new InvalidOperationException(
-                "GYM_API_TOKEN is required. Set it to a Personal API Token (gma_...) issued via Telegram bot.");
+                "GYM_API_TOKEN is required. Set it to a Personal API Token (gma_...) created in the GymAssistant app: Settings -> API tokens.");
         if (!TokenShape.IsMatch(token))
             throw new InvalidOperationException(
                 $"GYM_API_TOKEN has invalid shape. Expected 'gma_' followed by 40-80 url-safe chars; got '{token[..Math.Min(token.Length, 12)]}...'.");
