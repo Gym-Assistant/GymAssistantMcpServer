@@ -1,7 +1,10 @@
-"""Изолированная приёмка планов через настоящий stdio установленного MCP.
+"""Изолированная приёмка планов через настоящий stdio локального MCP.
 
-Запуск: ~/tools/gymassistant-mcp/.venv/bin/python integrations/local-gymassistant/verify_plans_stdio.py
-Настоящий сервер и vault .env не меняются и не используются для запросов.
+Запуск окружением с зависимостями из requirements.txt:
+  python integrations/local-gymassistant/verify_plans_stdio.py              # код из репозитория
+  python integrations/local-gymassistant/verify_plans_stdio.py /путь/к/установке
+Проверяется временная копия server.py и модулей; исходный каталог не меняется.
+API — синтетический loopback, токен — тестовый, env-файл — пустой временный.
 """
 import asyncio
 from contextlib import asynccontextmanager
@@ -11,8 +14,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
-import re
 import shutil
+import sys
 import tempfile
 from threading import Thread
 from urllib.parse import parse_qs, urlsplit
@@ -22,8 +25,8 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 
-INSTALLED = Path.home() / 'tools/gymassistant-mcp'
-PYTHON = INSTALLED / '.venv/bin/python'
+SOURCE = Path(__file__).resolve().parent
+MODULES = ['server.py', 'core_tools.py', 'health_tools.py', 'plan_tools.py']
 TOKEN = 'gma_synthetic_fixture_only'
 OWNER = '11111111-1111-4111-8111-111111111111'
 PERSONAL = '22222222-2222-4222-8222-222222222222'
@@ -175,11 +178,12 @@ def unpack(result):
 
 @asynccontextmanager
 async def connection(server_path, port, error_log):
-    # Не наследуем реальные токены процесса. Сервер копии также не читает vault .env.
+    # Не наследуем реальные токены процесса; env-файл копии — пустой временный.
     parameters = StdioServerParameters(
-        command=str(PYTHON), args=[str(server_path)],
+        command=sys.executable, args=[str(server_path)],
         env={'PATH': os.defpath, 'GYM_API_TOKEN': TOKEN,
              'GYM_API_URL': f'http://127.0.0.1:{port}/api', 'PYTHONUNBUFFERED': '1',
+             'GYM_MCP_ENV_FILE': str(server_path.with_name('fixture.env')),
              'GYM_PLAN_BACKUP_DIR': str(server_path.parent / 'backups')},
     )
     async with stdio_client(parameters, errlog=error_log) as (read, write):
@@ -238,25 +242,14 @@ def assert_payload(plan, request, returned_id):
 
 async def verify(server_path, port, fixture, error_log):
     async with connection(server_path, port, error_log) as session:
-        baseline = {tool.name: tool.model_dump() for tool in (await session.list_tools()).tools}
-        assert set(baseline) == EXISTING
+        listed = {tool.name: tool.model_dump() for tool in (await session.list_tools()).tools}
+        assert set(listed) == EXISTING | ADDED
+        for name in ('gym_plans', 'gym_plan', 'gym_exercises', 'gym_health_daily', 'gym_health_metrics'):
+            assert listed[name]['annotations']['readOnlyHint'] is True
         health_before = unpack(await session.call_tool('gym_health_daily', {
             'from_date': '2026-10-20', 'to_date': '2026-10-20'}))
         metrics_before = unpack(await session.call_tool('gym_health_metrics'))
         assert health_before == HEALTH and metrics_before == METRICS
-
-    source = server_path.read_text()
-    marker = 'if __name__ == "__main__":'
-    assert source.count(marker) == 1 and 'register_plan_tools(' not in source
-    server_path.write_text(source.replace(marker,
-        'from plan_tools import register_plan_tools, make_plan_writer, make_plan_appender\n'
-        'register_plan_tools(mcp, _api_get, make_plan_writer(API_URL, TOKEN), '
-        'make_plan_appender(API_URL, TOKEN))\n\n' + marker))
-
-    async with connection(server_path, port, error_log) as session:
-        listed = {tool.name: tool.model_dump() for tool in (await session.list_tools()).tools}
-        assert set(listed) == EXISTING | ADDED
-        assert {name: listed[name] for name in EXISTING} == baseline
         assert listed['gym_create_plan']['annotations']['readOnlyHint'] is False
         assert listed['gym_create_plan']['annotations']['idempotentHint'] is False
         assert listed['gym_append_plan_days']['annotations']['readOnlyHint'] is False
@@ -410,7 +403,7 @@ async def verify(server_path, port, fixture, error_log):
         assert all(method in ('GET', 'POST') and path.startswith('/api/')
                    for method, path, _ in fixture.requests)
         return {'result': 'PASS', 'transport': 'real stdio', 'api': 'loopback synthetic',
-                'unchanged_tools': len(EXISTING), 'added_tools': len(ADDED),
+                'tools': len(listed), 'plan_tools': len(ADDED),
                 'created_days': 2, 'created_sets': 6, 'invalid_requests_blocked': len(cases),
                 'http_200_empty_accepted': True, 'http_500_no_retry': True,
                 'appended_days': 7, 'old_plan_tree_preserved': True, 'exercise_pool_reused': True,
@@ -429,20 +422,11 @@ def main():
         with tempfile.TemporaryDirectory(prefix='gym-plans-stdio-') as directory:
             temporary = Path(directory)
             fixture.backup_dir = temporary / 'backups'
-            source = (INSTALLED / 'server.py').read_text()
-            # Для сравнения прежних схем исключаем только новую регистрацию из временной копии.
-            source = re.sub(r'^from plan_tools import [^\n]+\n', '', source, flags=re.MULTILINE)
-            source = re.sub(
-                r'^register_plan_tools\(\s*mcp,\s*_api_get,\s*make_plan_writer\(API_URL,\s*TOKEN\)'
-                r'(?:,\s*make_plan_appender\(API_URL,\s*TOKEN\))?\s*\)\n',
-                '', source, flags=re.MULTILINE)
-            vault_marker = 'VAULT_ENV = Path.home() / "Vaults/Nikita-git/.env"'
-            assert source.count(vault_marker) == 1
-            source = source.replace(vault_marker, 'VAULT_ENV = Path(__file__).with_name(".fixture.env")')
+            source = Path(sys.argv[1]).expanduser().resolve() if len(sys.argv) > 1 else SOURCE
+            for name in MODULES:
+                shutil.copyfile(source / name, temporary / name)
+            (temporary / 'fixture.env').write_text('')
             server_path = temporary / 'server.py'
-            server_path.write_text(source)
-            shutil.copyfile(INSTALLED / 'health_tools.py', temporary / 'health_tools.py')
-            shutil.copyfile(Path(__file__).with_name('plan_tools.py'), temporary / 'plan_tools.py')
             with (temporary / 'stderr.log').open('w+') as error_log:
                 result = asyncio.run(asyncio.wait_for(
                     verify(server_path, server.server_port, fixture, error_log), timeout=60))
