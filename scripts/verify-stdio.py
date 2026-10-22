@@ -14,10 +14,15 @@ posts = []
 PLAN_ID = '11111111-1111-1111-1111-111111111111'
 MEASUREMENT = {'trackingType':'interval','rounds':5,'workSeconds':30,'recoverySeconds':60}
 CATALOG = {'globalId':PLAN_ID,'name':'Шаблон','nameEn':'Template','isHidden':True,
+           'templateRevision':'ga043-2026-10-22-v1',
            'canonicalId':'22222222-2222-2222-2222-222222222222', 'loadConvention':'per_implement',
            'groupCode':'chest','isUnilateral':False,'aliasesEn':['Alternate name'],
            'muscles':[{'muscleCode':'chest','loadPercent':70,'role':'primary'}],
            'media':[{'kind':'image','url':'https://example.test/template.webp'}]}
+PERSONAL = {'id':'33333333-3333-3333-3333-333333333333', 'globalId':PLAN_ID,
+            'name':'Мой жим', 'oneRepMax':97.5, 'gymIds':['44444444-4444-4444-4444-444444444444'],
+            'templateRevision':'ga043-2026-10-22-v1','templateOverrides':['name','loadConvention'],
+            'trackingType':'weight_reps','loadConvention':'per_implement'}
 PLAN = {'id':PLAN_ID,'updatedAt':'2026-10-22T09:00:00Z','templates':[
     {'title':'Интервалы','exercises':[{'sets':[{'number':1,'measurement':MEASUREMENT},
                                              {'number':2,'reps':10,'targetWeight':80}]}]}]}
@@ -43,6 +48,8 @@ class Backend(BaseHTTPRequestHandler):
             payload = CATALOG
         elif self.path == '/api/exercises/defaults?offset=0&limit=200&includeHidden=true':
             payload = {'items':[CATALOG],'total':1}
+        elif self.path == '/api/exercises?offset=0&limit=200':
+            payload = {'items':[PERSONAL],'total':1}
         else:
             self.respond(404); return
         self.respond(200, payload)
@@ -51,7 +58,7 @@ class Backend(BaseHTTPRequestHandler):
             self.respond(401); return
         payload = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         posts.append((self.path, payload))
-        if self.path == '/api/plans':
+        if self.path in ('/api/plans', '/api/exercises'):
             self.respond(200)
         elif self.path == f'/api/plans/{PLAN_ID}/days':
             self.respond(200, PLAN)
@@ -123,18 +130,34 @@ async def verify(command, url):
         assert all(field in read_text for field in ('trackingtype','interval','workseconds','recoveryseconds','targetweight'))
         assert len(posts)==2, 'Unexpected write or retry'
         schema = json.dumps(schemas['create_exercise']).lower()
-        assert all(field in schema for field in ('nameen','aliasesen','loadconvention','isunilateral','media','role'))
+        assert all(field in schema for field in ('nameen','aliasesen','loadconvention','isunilateral','media','role','templaterevision','templateoverrides'))
         hidden = await call(8,'tools/call',{'name':'get_default_exercise','arguments':{'globalId':PLAN_ID}})
         assert not hidden.get('isError',False), hidden
         hidden_text = ' '.join(x['text'] for x in hidden['content'] if x['type']=='text')
-        assert all(field in hidden_text for field in ('per_implement','primary','template.webp','canonicalId'))
+        assert all(field in hidden_text for field in ('per_implement','primary','template.webp','canonicalId','templateRevision','ga043-2026-10-22-v1'))
         catalog = await call(9,'tools/call',{'name':'list_default_exercises','arguments':{'includeHidden':True}})
         assert not catalog.get('isError',False), catalog
         assert requests[-1][0] == '/api/exercises/defaults?offset=0&limit=200&includeHidden=true'
         assert len(posts)==2, 'Catalog reading performed a write'
-        await call(10,'ping',{})
+        personal = await call(10,'tools/call',{'name':'list_exercises','arguments':{}})
+        assert not personal.get('isError',False), personal
+        personal_text = ' '.join(x['text'] for x in personal['content'] if x['type']=='text')
+        assert all(field in personal_text for field in ('templateRevision','templateOverrides','97.5',PERSONAL['id']))
+        saved = await call(11,'tools/call',{'name':'create_exercise','arguments':{'body':PERSONAL}})
+        assert not saved.get('isError',False), saved
+        assert posts[-1][0] == '/api/exercises'
+        for field, value in PERSONAL.items():
+            assert posts[-1][1][field] == value, field + ' changed'
+        legacy = {key:value for key,value in PERSONAL.items() if key not in ('templateRevision','templateOverrides')}
+        saved_legacy = await call(12,'tools/call',{'name':'create_exercise','arguments':{'body':legacy}})
+        assert not saved_legacy.get('isError',False), saved_legacy
+        assert 'templateRevision' not in posts[-1][1] and 'templateOverrides' not in posts[-1][1]
+        assert len(posts)==4, 'Unexpected write or retry'
+        await call(13,'ping',{})
         print(json.dumps({'initialize':True,'tools':len(names),'health_check':True,
-                          'health_daily':True,'catalog_metadata_hidden_read':True,'typed_create_append_read':True,'legacy_sets_preserved':True,'profile_pat_forwarded':True,'stdout_jsonrpc':True,'backend':'synthetic'}))
+                          'health_daily':True,'catalog_metadata_hidden_read':True,'exercise_provenance_roundtrip':True,
+                          'legacy_exercise_provenance_omitted':True,'typed_create_append_read':True,'legacy_sets_preserved':True,
+                          'profile_pat_forwarded':True,'stdout_jsonrpc':True,'backend':'synthetic'}))
     finally:
         process.stdin.close()
         try: await asyncio.wait_for(process.wait(),10)

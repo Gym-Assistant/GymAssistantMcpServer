@@ -91,7 +91,7 @@ claude mcp add gymassistant -- docker run -i --rm \
 
 - .NET 10
 - `ModelContextProtocol` 1.3.x
-- `GymAssistant.Client` 0.17.0 (NSwag-сгенерированный клиент)
+- `GymAssistant.Client` 0.18.0 (NSwag-сгенерированный клиент)
 - Сервер совместим с любым MCP-клиентом, поддерживающим stdio-транспорт
 
 ## Лицензия

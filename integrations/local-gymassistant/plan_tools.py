@@ -240,12 +240,15 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
                       include_hidden: bool = False) -> dict:
         """Упражнения с ID и метаданными. personal требует exercises:read; default публичный.
 
-        personal — личные упражнения, default — общий каталог. Не выдумывай ID.
+        personal: id — личное упражнение, globalId — связь с общим шаблоном.
+        default: globalId — сам шаблон. Не подменяй личный id значением globalId.
         Для плана предпочитай личный вариант пользователя; листай offset/limit.
         include_hidden допустим только для default: включает скрытые шаблоны для
         восстановления ссылок истории. По умолчанию новые планы используют видимый каталог.
         Поля groupCode, nameEn, aliasesEn, media, loadConvention, isUnilateral и
-        muscles.role передаются без преобразования. canonicalId не переназначает личные ID.
+        muscles.role, templateRevision и templateOverrides передаются без преобразования.
+        Это версии и личные переопределения метаданных, не история подходов.
+        canonicalId не переназначает личные ID.
         """
         if source == 'personal' and include_hidden:
             raise ValueError('include_hidden доступен только для общего каталога (source=default).')
@@ -260,7 +263,8 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
         """Общий шаблон по реальному globalId, включая скрытый. Публичный справочник.
 
         Для разбора старых планов/истории, если шаблон отсутствует в обычном списке.
-        Сохраняет метаданные, isHidden и canonicalId; ничего не перепривязывает.
+        Сохраняет метаданные, templateRevision, isHidden и canonicalId;
+        ничего не перепривязывает и не создаёт личное упражнение.
         """
         return api_get('/exercises/defaults/' + str(global_id))
 

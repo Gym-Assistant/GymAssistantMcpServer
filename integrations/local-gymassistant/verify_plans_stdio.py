@@ -32,6 +32,7 @@ OWNER = '11111111-1111-4111-8111-111111111111'
 PERSONAL = '22222222-2222-4222-8222-222222222222'
 DEFAULT = '33333333-3333-4333-8333-333333333333'
 HIDDEN = {'globalId': '44444444-4444-4444-8444-444444444444', 'name': 'Архивный шаблон',
+          'templateRevision': 'ga043-2026-10-22-v1',
           'isHidden': True, 'canonicalId': DEFAULT, 'nameEn': 'Archived template',
           'groupCode': 'back', 'loadConvention': 'per_side', 'isUnilateral': True,
           'aliasesEn': ['Alternate name'], 'muscles': [{'muscleCode': 'lats', 'loadPercent': 70, 'role': 'primary'}],
@@ -115,7 +116,8 @@ class Fixture:
                     result = {'items': [WORKOUT][offset:offset + limit], 'total': 1}
                 elif parsed.path in ('/api/exercises', '/api/exercises/defaults', '/api/plans'):
                     items = {
-                        '/api/exercises': [{'id': PERSONAL, 'name': 'Личное упражнение', 'isDeleted': False, 'trackingType': 'cardio'}],
+                        '/api/exercises': [{'id': PERSONAL, 'globalId': DEFAULT, 'name': 'Личное упражнение', 'isDeleted': False, 'trackingType': 'cardio',
+                                           'templateRevision': 'ga043-2026-10-22-v1', 'templateOverrides': ['name', 'trackingType']}],
                         '/api/exercises/defaults': [{'globalId': DEFAULT, 'name': 'Базовое упражнение'}],
                         '/api/plans': fixture.plans,
                     }[parsed.path]
@@ -250,7 +252,8 @@ def assert_payload(plan, request, returned_id):
             entry = pool[nested['planExerciseId']]
             assert entry['planId'] == plan['id']
             assert nested['userExerciseId'] == entry['userExerciseId'] == exercise.get('user_exercise_id')
-            assert nested['defaultExerciseGlobalId'] == entry['defaultExerciseGlobalId'] == exercise.get('default_exercise_id')
+            expected_default_id = DEFAULT if exercise.get('user_exercise_id') else exercise.get('default_exercise_id')
+            assert nested['defaultExerciseGlobalId'] == entry['defaultExerciseGlobalId'] == expected_default_id
             assert nested['displayName'] == entry['displayName'] == (
                 'Личное упражнение' if exercise.get('user_exercise_id') else 'Базовое упражнение')
             assert len(nested['sets']) == len(exercise['sets'])
@@ -292,7 +295,10 @@ async def verify(server_path, port, fixture, error_log):
         schema = listed['gym_create_plan']['inputSchema']
         assert {'PlanDay', 'PlanExercise', 'PlanSet'} <= set(schema['$defs'])
         assert schema['$defs']['PlanExercise']['additionalProperties'] is False
-        assert unpack(await session.call_tool('gym_exercises'))['items'][0]['id'] == PERSONAL
+        personal = unpack(await session.call_tool('gym_exercises'))['items'][0]
+        assert personal['id'] == PERSONAL and personal['globalId'] == DEFAULT
+        assert personal['templateRevision'] == 'ga043-2026-10-22-v1'
+        assert personal['templateOverrides'] == ['name', 'trackingType']
         assert unpack(await session.call_tool('gym_exercises', {'source': 'default'}))['items'][0]['globalId'] == DEFAULT
         catalog = unpack(await session.call_tool('gym_exercises', {'source': 'default', 'include_hidden': True}))
         assert catalog['total'] == 2 and catalog['items'][1] == HIDDEN
@@ -479,6 +485,7 @@ async def verify(server_path, port, fixture, error_log):
                 'stale_append_blocked_before_post': True, 'append_409_no_retry': True,
                 'append_malformed_and_500_no_retry': True,
                 'typed_create_append_read': True, 'typed_workout_read': True, 'record_guard': True,
+                'exercise_provenance_preserved': True, 'personal_plan_default_link_preserved': True,
                 'health_unchanged': True, 'production_requests': 0}
 
 

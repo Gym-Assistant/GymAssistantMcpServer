@@ -8,7 +8,7 @@ namespace GymAssistant.McpServer.Tools;
 public static class ExerciseTools
 {
     [McpServerTool(Name = "list_exercises", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Список упражнений пользователя (его персональные/кастомные упражнения и подключённые из дефолтов) с пагинацией. Scope: exercises:read.")]
+     Description("Личные упражнения пользователя с пагинацией: Id — личное упражнение, GlobalId — связь с общим шаблоном. TemplateRevision и TemplateOverrides описывают наследование метаданных; сохраняй их при последующей правке. Scope: exercises:read.")]
     public static Task<ExerciseViewModelPaged> ListExercisesAsync(
         GymClient client,
         CancellationToken ct,
@@ -17,7 +17,7 @@ public static class ExerciseTools
         => client.GetUserExercisesAsync(offset, limit, null, null, ct);
 
     [McpServerTool(Name = "list_default_exercises", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Общий каталог упражнений с поиском, метаданными и пагинацией. По умолчанию скрытые шаблоны исключены; includeHidden нужен для восстановления ссылок истории. Scope не нужен: публичный справочник, backend не требует авторизации.")]
+     Description("Общий каталог с поиском, метаданными, TemplateRevision и пагинацией. GlobalId обозначает шаблон, а не личное упражнение. Скрытые шаблоны исключены; includeHidden нужен для чтения ссылок истории. Scope не нужен: публичный справочник, backend не требует авторизации.")]
     public static Task<ExerciseDefaultViewModelPaged> ListDefaultExercisesAsync(
         GymClient client,
         CancellationToken ct,
@@ -30,7 +30,7 @@ public static class ExerciseTools
         => client.GetDefaultExercisesAsync(offset, limit, search!, muscleCode!, equipmentCode!, includeHidden, ct);
 
     [McpServerTool(Name = "get_default_exercise", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Общий шаблон по globalId, включая скрытый: метаданные, isHidden и canonicalId без переназначения личных ID. Для чтения старых планов и истории. Scope не нужен: публичный справочник, backend не требует авторизации.")]
+     Description("Общий шаблон по globalId, включая скрытый: метаданные, TemplateRevision, isHidden и canonicalId без переназначения личных ID. Для чтения старых планов и истории. Scope не нужен: публичный справочник, backend не требует авторизации.")]
     public static Task<ExerciseDefaultViewModel> GetDefaultExerciseAsync(
         GymClient client,
         [Description("Реальный globalId шаблона упражнения")] Guid globalId,
@@ -59,10 +59,10 @@ public static class ExerciseTools
         => client.GetEquipmentAsync(ct);
 
     [McpServerTool(Name = "create_exercise", Destructive = true),
-     Description("Создать или обновить личное упражнение (Upsert по Id). Полный ExerciseViewModel: Muscles/Equipment, TrackingType, GroupCode, NameEn, DescriptionEn, AliasesEn, Media, LoadConvention, IsUnilateral и Muscles.Role. Пропущенные nullable метаданные сохраняются, пустые массивы очищают их. TrackingType и LoadConvention не пересчитывают старые подходы. Scope: exercises:write.")]
+     Description("Создать или обновить личное упражнение (Upsert по личному Id, не GlobalId шаблона). Перед правкой прочитай list_exercises и сохрани текущие TemplateRevision/TemplateOverrides. Для намеренной правки наследуемого поля добавь его camelCase-имя в TemplateOverrides; пустой список не сбрасывает прежние переопределения. TrackingType и LoadConvention не пересчитывают старые подходы. Общий каталог этим инструментом не редактируется. Scope: exercises:write.")]
     public static Task CreateExerciseAsync(
         GymClient client,
-        [Description("Полный объект упражнения (ExerciseViewModel). Сервер выполняет upsert по Id.")]
+        [Description("Полный ExerciseViewModel с личным Id, именем, GymIds и метаданными. Для нового fork прочитай get_default_exercise, используй новый личный Id, GlobalId шаблона, его TemplateRevision и TemplateOverrides:[] (либо явные свои переопределения). Без TemplateRevision сервер защищает старые офлайн-режимы. Для существующего сохраняй идентичность и provenance из list_exercises.")]
         ExerciseViewModel body,
         CancellationToken ct)
         => client.SaveExerciseAsync(body, ct);
@@ -71,7 +71,7 @@ public static class ExerciseTools
      Description("Удалить упражнение пользователя по id (soft delete на сервере). Scope: exercises:delete.")]
     public static Task DeleteExerciseAsync(
         GymClient client,
-        [Description("ID упражнения, которое нужно удалить")] Guid id,
+        [Description("Личный Id из list_exercises, не GlobalId общего шаблона")] Guid id,
         CancellationToken ct)
         => client.DeleteExerciseAsync(id, ct);
 }
