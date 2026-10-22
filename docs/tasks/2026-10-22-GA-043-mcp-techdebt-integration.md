@@ -30,7 +30,7 @@
 
 ## Подготовка перед расширением метаданных
 
-После проверенного backend release обновить NuGet на опубликованный аддитивный контракт метаданных, добавить thin чтение шаблона по ID/includeHidden и повторить .NET/stdio проверки. До этого PR остаётся draft; образ не публикуется. Перед будущим обновлением локального Python MCP сохранить backup и действующий путь env-файла через GYM_MCP_ENV_FILE: новый сервер больше не содержит личный hardcoded путь. Переподключение MCP требуется отдельно от публикации образа.
+Эти шаги выполнены в контракте метаданных и фактическом выпуске ниже. Для уже открытых MCP-сессий по-прежнему требуется переподключение; публикация образа сама по себе их не обновляет.
 
 ## Контракт метаданных после backend0.18.0
 
@@ -41,6 +41,17 @@
 - .NET114/114, Python83/83, настоящий .NETstdio44 и Pythonstdio15: PASS. Проверены includeHidden query, скрытый read-by-ID, metadata/media/role roundtrip, отсутствие записи при чтении, прежние typed create/append/read и Health. Логи `/tmp/ga043-mcp-metadata-{dotnet,dotnet-stdio,python,stdio-python,plans-stdio}.log`.
 - В действующем локальном MCP server.py читает vault.env по прежнему hardcoded пути; run.sh пока не задаёт GYM_MCP_ENV_FILE. При установке нового runtime сначала сохранить резервную копию, затем явно указать тот же путь в wrapper с приоритетом существующей переменной процесса. Содержимое .env/ключи не копировать и не изменять.
 
-## Осталось для выпуска
+## Фактический runtime и выпуск
 
-Дождаться Docker/CI, объединить PR9 и опубликовать следующий MINOR v0.4.0 (remote tags проверены, последний v0.3.0). После проверки образа обновить локальный runtime с резервной копией, проверить synthetic stdio и доступные readonly маршруты без тестовых записей. Активные MCP-сессии должны переподключиться отдельно.
+- [PR9](https://github.com/Gym-Assistant/GymAssistantMcpServer/pull/9) объединён commit `cbdf44490de87f1ea3f1ef4b34186e4201927320`; исходный PR6 GitHub также отметил MERGED. Тег `v0.4.0` новый, прежние теги не передвигались.
+- [CI39783542621](https://github.com/Gym-Assistant/GymAssistantMcpServer/actions/runs/39783542621) и [mainCI39783775275](https://github.com/Gym-Assistant/GymAssistantMcpServer/actions/runs/39783775275): dotnet/python/docker SUCCESS. Локальный Docker build и настоящий container stdio44 также PASS (`/tmp/ga043-mcp-metadata-docker.log`, `/tmp/ga043-mcp-metadata-docker-stdio.log`).
+- Локальный Python runtime установлен из того же дерева. Резервная копия файлов: `/Users/nikitagorovenko/tools/gymassistant-mcp/.backups/repo-20261022T130616000980Z` (закрытый каталог). Проверено совпадение всех6 managed-файлов с релизным исходником.
+- Vault `.env` проверен на побайтную неизменность. Единственное изменение wrapper: прежний путь передан через default `GYM_MCP_ENV_FILE`; явная переменная окружения имеет приоритет. Старый run.sh сохранён и проверен по исходному fingerprint. Ключи, права и конфигурация MCP-клиента не менялись.
+- Установленный runtime прошёл два синтетических stdio-прогона:15 инструментов, typed plans/append/backup/legacy history и Health PASS. Новый процесс с действующей конфигурацией выполнил **только чтение** профиля, личных упражнений, планов, справочника Health и общего каталога с includeHidden/read-by-ID: PASS, writes0. Агрегированный отчёт `/tmp/ga043-mcp-readonly-live-result.json`, без пользовательских записей и ключей.
+- Уже открытые сессии Mentoru продолжают прежний процесс до переподключения; новая установка проверена отдельным процессом. Принудительное завершение процессов не выполнялось.
+
+Откат локального runtime: вернуть5 прежних файлов (`server.py`, `health_tools.py`, `plan_tools.py`, `workout_tools.py`, `run.sh`) из указанной копии. Новые core_tools.py/requirements.txt не влияют на старый server.py; удаление не требуется. Vault `.env`, виртуальное окружение и пользовательские backup планов не восстанавливать поверх текущих. Для .NET можно выбрать предыдущий immutable image0.3.0.
+
+
+- [Release39783948610](https://github.com/Gym-Assistant/GymAssistantMcpServer/actions/runs/39783948610): SUCCESS, публикация [v0.4.0](https://github.com/Gym-Assistant/GymAssistantMcpServer/releases/tag/v0.4.0)2026-10-22T13:08:58Z. Multi-arch image `ghcr.io/gym-assistant/gymassistant-mcp-server@sha256:6b25d24864ca80275e99a17dac5ec2b297917eef94e542320df5d268839b500e`; GitHub Packages подтверждает теги0.4.0/latest (id1428515463).
+- **Именно опубликованный digest** скачан и прошёл настоящий container stdio44 с синтетическим API: Health, metadata/includeHidden/read-by-ID, typed create/append/read и прежние подходы PASS. Лог `/tmp/ga043-mcp040-published-stdio.log`; исходный release log `/tmp/ga043-mcp040-release.log`. Ни одного тестового изменения пользовательских данных.
