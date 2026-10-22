@@ -31,6 +31,8 @@ TOKEN = 'gma_synthetic_fixture_only'
 OWNER = '11111111-1111-4111-8111-111111111111'
 PERSONAL = '22222222-2222-4222-8222-222222222222'
 DEFAULT = '33333333-3333-4333-8333-333333333333'
+STRANGER = '55555555-5555-4555-8555-555555555555'
+FOREIGN_PLAN = '66666666-6666-4666-8666-666666666666'
 EXISTING = {
     'gym_me', 'gym_workouts', 'gym_workout', 'gym_records', 'gym_body_latest',
     'gym_body_history', 'gym_status', 'gym_health_daily', 'gym_health_metrics',
@@ -55,6 +57,10 @@ class Fixture:
         self.requests = []
         self.posts = []
         self.plans = []
+        # GET /plans/{id} на backend не фильтрует владельца: чужой план тоже отдаётся.
+        self.foreign = {FOREIGN_PLAN: {'id': FOREIGN_PLAN, 'authorUserId': STRANGER, 'name': 'Чужой план',
+                                       'isPublished': True, 'isDeleted': False,
+                                       'updatedAt': '2026-10-21T09:00:00+00:00', 'templates': [], 'exercises': []}}
         self.next_post_status = 200
         self.append_posts = []
         self.backup_dir = None
@@ -99,6 +105,13 @@ class Fixture:
                     }[parsed.path]
                     offset, limit = int(query.get('offset', [0])[0]), int(query.get('limit', [100])[0])
                     result = {'items': items[offset:offset + limit], 'total': len(items)}
+                elif parsed.path.startswith('/api/plans/') and parsed.path.count('/') == 3:
+                    plan_id = parsed.path.rsplit('/', 1)[1]
+                    by_id = {plan['id']: plan for plan in fixture.plans} | fixture.foreign
+                    if plan_id not in by_id:
+                        self.respond(404)
+                        return
+                    result = by_id[plan_id]
                 elif parsed.path == '/api/health/apple/daily':
                     assert query == {'from': ['2026-10-20'], 'to': ['2026-10-20']}
                     result = HEALTH
@@ -289,6 +302,13 @@ async def verify(server_path, port, fixture, error_log):
         assert_payload(fixture.posts[0], request, created['plan_id'])
         loaded = unpack(await session.call_tool('gym_plan', {'plan_id': created['plan_id']}))
         assert loaded == fixture.posts[0]
+        # Чужой план по ID и отсутствующий ID (404) не возвращаются.
+        for plan_id in (FOREIGN_PLAN, '77777777-7777-4777-8777-777777777777'):
+            assert (await session.call_tool('gym_plan', {'plan_id': plan_id})).isError
+        reads_by_id = [path for method, path, _ in fixture.requests
+                       if method == 'GET' and path.startswith('/api/plans/')]
+        assert reads_by_id == [f'/api/plans/{created["plan_id"]}', f'/api/plans/{FOREIGN_PLAN}',
+                               '/api/plans/77777777-7777-4777-8777-777777777777']
 
         # Некорректный ввод не должен дойти до записи даже через MCP-обвязку.
         cases = []
@@ -354,6 +374,10 @@ async def verify(server_path, port, fixture, error_log):
                         assert actual[field] == expected[field]
         assert len(fixture.backups_verified) == 1
 
+        foreign = await session.call_tool('gym_append_plan_days', dict(
+            append_request, plan_id=FOREIGN_PLAN, expected_updated_at=fixture.foreign[FOREIGN_PLAN]['updatedAt']))
+        assert foreign.isError and len(fixture.append_posts) == 1 and len(fixture.backups_verified) == 1
+
         # Старый expectedUpdatedAt отклоняется уже до POST, без повторного добавления.
         rejected = await session.call_tool('gym_append_plan_days', append_request)
         assert rejected.isError and len(fixture.append_posts) == 1
@@ -403,7 +427,7 @@ async def verify(server_path, port, fixture, error_log):
         assert all(method in ('GET', 'POST') and path.startswith('/api/')
                    for method, path, _ in fixture.requests)
         return {'result': 'PASS', 'transport': 'real stdio', 'api': 'loopback synthetic',
-                'tools': len(listed), 'plan_tools': len(ADDED),
+                'tools': len(listed), 'plan_tools': len(ADDED), 'plan_by_id_owner_checked': True,
                 'created_days': 2, 'created_sets': 6, 'invalid_requests_blocked': len(cases),
                 'http_200_empty_accepted': True, 'http_500_no_retry': True,
                 'appended_days': 7, 'old_plan_tree_preserved': True, 'exercise_pool_reused': True,

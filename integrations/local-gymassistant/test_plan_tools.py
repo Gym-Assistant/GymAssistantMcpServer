@@ -57,12 +57,19 @@ class PlanToolsTests(unittest.TestCase):
             '/exercises': [{'id': PERSONAL, 'globalId': GLOBAL, 'name': 'Личный жим', 'isDeleted': False}],
             '/exercises/defaults': [{'globalId': DEFAULT, 'name': 'Подтягивания'}],
         }
+        # GET /plans/{id}: backend не фильтрует владельца, поэтому здесь есть и чужие планы.
+        self.by_id = {}
         register_plan_tools(self.registry, self.get, self.post)
 
     def get(self, path, params=None):
         self.calls.append((path, params))
         if path == '/auth/me':
             return {'id': OWNER}
+        if path.startswith('/plans/'):
+            plan_id = path.removeprefix('/plans/')
+            if plan_id not in self.by_id:
+                raise urllib.error.HTTPError(f'https://example.invalid/api{path}', 404, 'Not Found', {}, None)
+            return copy.deepcopy(self.by_id[plan_id])
         items = self.data[path]
         offset = params['offset']
         return {'items': copy.deepcopy(items[offset:offset + params['limit']]), 'total': len(items)}
@@ -181,18 +188,42 @@ class PlanToolsTests(unittest.TestCase):
         calls = [params for path, params in self.calls if path == '/exercises']
         self.assertEqual(calls, [{'offset': 0, 'limit': 100}, {'offset': 100, 'limit': 100}])
 
-    def test_read_plan_uses_only_owned_list_and_not_unscoped_id_endpoint(self):
-        self.data['/plans'] = [
-            {'id': str(UUID(int=index + 10)), 'name': 'Личный план'} for index in range(101)
-        ] + [{'id': PERSONAL, 'name': 'Нужный план'}]
+    def test_read_plan_uses_id_endpoint_once_and_checks_author(self):
+        self.data['/plans'] = [{'id': str(UUID(int=index + 10))} for index in range(101)]
+        self.by_id[PERSONAL] = {'id': PERSONAL, 'authorUserId': OWNER.upper(), 'name': 'Нужный план'}
         result = self.registry.functions['gym_plan'](UUID(PERSONAL))
         self.assertEqual(result['name'], 'Нужный план')
-        self.assertEqual([path for path, _ in self.calls], ['/plans', '/plans'])
-        with self.assertRaises(ValueError):
+        # Без перебора страниц /plans: один профиль и один GET по ID.
+        self.assertEqual(self.calls, [('/auth/me', None), (f'/plans/{PERSONAL}', None)])
+
+    def test_foreign_plan_from_unscoped_id_endpoint_is_not_returned(self):
+        self.by_id[PERSONAL] = {'id': PERSONAL, 'authorUserId': OTHER, 'isPublished': True, 'name': 'Чужой'}
+        with self.assertRaisesRegex(ValueError, 'не найден'):
+            self.registry.functions['gym_plan'](UUID(PERSONAL))
+        for broken in [{'id': PERSONAL}, {'id': PERSONAL, 'authorUserId': 'not-a-guid'},
+                       {'id': OTHER, 'authorUserId': OWNER}, []]:
+            self.by_id[PERSONAL] = broken
+            with self.subTest(plan=broken), self.assertRaises(ValueError):
+                self.registry.functions['gym_plan'](UUID(PERSONAL))
+
+    def test_missing_plan_404_is_not_found(self):
+        with self.assertRaisesRegex(ValueError, 'не найден'):
             self.registry.functions['gym_plan'](UUID(OTHER))
 
+    def test_other_http_errors_are_not_masked_as_not_found(self):
+        def denied(path, params=None):
+            if path == '/auth/me':
+                return {'id': OWNER}
+            raise urllib.error.HTTPError('https://example.invalid/api/plans', 403, 'Forbidden', {}, None)
+        registry = Registry()
+        register_plan_tools(registry, denied, self.post)
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            registry.functions['gym_plan'](UUID(PERSONAL))
+        caught.exception.close()
+        self.assertEqual(caught.exception.code, 403)
+
     def test_deleted_plan_is_not_returned(self):
-        self.data['/plans'] = [{'id': PERSONAL, 'isDeleted': True}]
+        self.by_id[PERSONAL] = {'id': PERSONAL, 'authorUserId': OWNER, 'isDeleted': True}
         with self.assertRaises(ValueError):
             self.registry.functions['gym_plan'](UUID(PERSONAL))
 
