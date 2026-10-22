@@ -2,7 +2,7 @@
 
 MCP-сервер, который даёт твоему Claude/Cursor/Codex доступ к твоим данным [GymAssistant](https://gym-assistant.ru) через Model Context Protocol.
 
-41 инструмент — read и write по тренировкам, замерам тела, упражнениям и планам. Авторизация — через **Personal API Token** (PAT) с гранулярными scope'ами.
+43 инструмента — read и write по тренировкам, замерам тела, упражнениям и планам. Авторизация — через **Personal API Token** (PAT) с гранулярными scope'ами.
 
 ## Установка
 
@@ -78,9 +78,25 @@ claude mcp add gymassistant -- docker run -i --rm \
 
 - .NET 10
 - `ModelContextProtocol` 1.3.x
-- `GymAssistant.Client` 0.11.1 (NSwag-сгенерированный клиент)
+- `GymAssistant.Client` 0.16.0 (NSwag-сгенерированный клиент)
 - Сервер совместим с любым MCP-клиентом, поддерживающим stdio-транспорт
 
 ## Лицензия
 
 MIT — см. [LICENSE](LICENSE).
+
+### Измерения подходов и дополнение планов
+
+Контракт клиента 0.16.0 передаёт `TrackingType`, `Measurement` и `ParentCode`.
+Время хранится в секундах, дистанция — в метрах, помощь — в килограммах.
+Наличие `Measurement` у конкретного подхода определяет его формат; старые
+`Reps`/`Weight` без этого поля сохраняют прежний смысл.
+
+`append_plan_days` добавляет только новые дни через отдельный endpoint, не заменяя
+существующий план. Перед записью нужно прочитать план и передать его
+`ExpectedUpdatedAt`. При 409 нужно заново прочитать план и согласовать изменения;
+автоматического повтора POST нет.
+
+Локальная Python-интеграция Mentoru описана отдельно в
+[integrations/local-gymassistant](integrations/local-gymassistant/README.md).
+Обновление файлов требует переподключения уже запущенного MCP-клиента.

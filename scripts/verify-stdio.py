@@ -10,18 +10,44 @@ from threading import Thread
 
 TOKEN = 'gma_' + 'a' * 40
 requests = []
+posts = []
+PLAN_ID = '11111111-1111-1111-1111-111111111111'
+MEASUREMENT = {'trackingType':'interval','rounds':5,'workSeconds':30,'recoverySeconds':60}
+PLAN = {'id':PLAN_ID,'updatedAt':'2026-10-22T09:00:00Z','templates':[
+    {'title':'Интервалы','exercises':[{'sets':[{'number':1,'measurement':MEASUREMENT},
+                                             {'number':2,'reps':10,'targetWeight':80}]}]}]}
 
 class Backend(BaseHTTPRequestHandler):
-    def do_GET(self):
-        requests.append((self.path, self.headers.get('Authorization')))
-        if self.path not in ('/api/auth/me', '/api/health/apple/daily?from=2026-10-16&to=2026-10-17') or self.headers.get('Authorization') != 'Bearer ' + TOKEN:
-            self.send_response(404); self.end_headers(); return
-        payload = {'id':'11111111-1111-1111-1111-111111111111','username':'runtime-fixture'} if self.path == '/api/auth/me' else [{'snapshot': {'day':'2026-10-17','timeZone':'Asia/Krasnoyarsk','readAt':'2026-10-17T12:00:00Z','values':{'steps':1234,'protein':None}},'deviceId':'11111111-1111-1111-1111-111111111111','receivedAt':'2026-10-17T12:01:00Z'}]
-        body = json.dumps(payload).encode()
-        self.send_response(200)
+    def respond(self, status, payload=None):
+        body = json.dumps(payload).encode() if payload is not None else b''
+        self.send_response(status)
         self.send_header('Content-Type','application/json')
         self.send_header('Content-Length',str(len(body)))
         self.end_headers(); self.wfile.write(body)
+    def do_GET(self):
+        requests.append((self.path, self.headers.get('Authorization')))
+        if self.headers.get('Authorization') != 'Bearer ' + TOKEN:
+            self.respond(401); return
+        if self.path == '/api/auth/me':
+            payload = {'id':PLAN_ID,'username':'runtime-fixture'}
+        elif self.path == '/api/health/apple/daily?from=2026-10-16&to=2026-10-17':
+            payload = [{'snapshot': {'day':'2026-10-17','timeZone':'Asia/Krasnoyarsk','readAt':'2026-10-17T12:00:00Z','values':{'steps':1234,'protein':None}},'deviceId':PLAN_ID,'receivedAt':'2026-10-17T12:01:00Z'}]
+        elif self.path == f'/api/plans/{PLAN_ID}':
+            payload = PLAN
+        else:
+            self.respond(404); return
+        self.respond(200, payload)
+    def do_POST(self):
+        if self.headers.get('Authorization') != 'Bearer ' + TOKEN:
+            self.respond(401); return
+        payload = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        posts.append((self.path, payload))
+        if self.path == '/api/plans':
+            self.respond(200)
+        elif self.path == f'/api/plans/{PLAN_ID}/days':
+            self.respond(200, PLAN)
+        else:
+            self.respond(404)
     def log_message(self,*args): pass
 
 async def verify(command, url):
@@ -64,9 +90,32 @@ async def verify(command, url):
         daily_text = ' '.join(x['text'] for x in daily['content'] if x['type']=='text')
         assert '1234' in daily_text and 'Asia/Krasnoyarsk' in daily_text and '2026-10-17' in daily_text
         assert requests[-1]==('/api/health/apple/daily?from=2026-10-16&to=2026-10-17','Bearer '+TOKEN)
-        await call(5,'ping',{})
+        schemas = {t['name']: t['inputSchema'] for t in listed['tools']}
+        for name in ('create_plan', 'append_plan_days', 'create_workout', 'update_set'):
+            schema = json.dumps(schemas[name]).lower()
+            assert 'measurement' in schema and 'trackingtype' in schema, name + ' lacks typed measurement'
+        created = await call(5,'tools/call',{'name':'create_plan','arguments':{'body':PLAN}})
+        assert not created.get('isError',False), 'Typed plan creation failed'
+        assert posts[-1][0] == '/api/plans'
+        sets = posts[-1][1]['templates'][0]['exercises'][0]['sets']
+        assert sets[0]['measurement'] == MEASUREMENT
+        assert sets[1]['reps'] == 10 and sets[1]['targetWeight'] == 80
+        assert 'measurement' not in sets[1]
+        addition = {'expectedUpdatedAt':PLAN['updatedAt'],'templates':PLAN['templates']}
+        appended = await call(6,'tools/call',{'name':'append_plan_days','arguments':{'id':PLAN_ID,'body':addition}})
+        assert not appended.get('isError',False), 'Typed append failed'
+        assert posts[-1][0] == f'/api/plans/{PLAN_ID}/days'
+        assert len(posts[-1][1]['templates']) == 1
+        assert posts[-1][1]['templates'][0]['exercises'][0]['sets'][0]['measurement'] == MEASUREMENT
+        assert 'expectedUpdatedAt' in posts[-1][1]
+        read = await call(7,'tools/call',{'name':'get_plan','arguments':{'id':PLAN_ID}})
+        assert not read.get('isError',False)
+        read_text = json.dumps(read).lower()
+        assert all(field in read_text for field in ('trackingtype','interval','workseconds','recoveryseconds','targetweight'))
+        assert len(posts)==2, 'Unexpected write or retry'
+        await call(8,'ping',{})
         print(json.dumps({'initialize':True,'tools':len(names),'health_check':True,
-                          'health_daily':True,'profile_pat_forwarded':True,'stdout_jsonrpc':True,'backend':'synthetic'}))
+                          'health_daily':True,'typed_create_append_read':True,'legacy_sets_preserved':True,'profile_pat_forwarded':True,'stdout_jsonrpc':True,'backend':'synthetic'}))
     finally:
         process.stdin.close()
         try: await asyncio.wait_for(process.wait(),10)

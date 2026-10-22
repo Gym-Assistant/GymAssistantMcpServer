@@ -33,6 +33,16 @@ public static class PlanTools
         CancellationToken ct)
         => client.SavePlanAsync(body, ct);
 
+    [McpServerTool(Name = "append_plan_days", Destructive = false, Idempotent = false),
+     Description("Добавить новые дни в существующий план без замены прежних дней. ExpectedUpdatedAt берётся из свежего get_plan; при конфликте 409 сначала перечитать план, автоматически не повторять запись. Scope: plans:write.")]
+    public static Task<PlanViewModel> AppendPlanDaysAsync(
+        GymClient client,
+        [Description("ID существующего плана")] Guid id,
+        [Description("Только новые Templates и недостающие Exercises, ExpectedUpdatedAt. Measurement хранит время в секундах, расстояние в метрах и помощь в килограммах.")]
+        AppendPlanDaysRequest body,
+        CancellationToken ct)
+        => client.AppendPlanDaysAsync(id, body, ct);
+
     [McpServerTool(Name = "delete_plan", Destructive = true),
      Description("Удалить тренировочный план по id (soft delete на сервере). Scope: plans:delete.")]
     public static Task DeletePlanAsync(
