@@ -8,7 +8,7 @@ namespace GymAssistant.McpServer.Tools;
 public static class DiagnosticsTools
 {
     [McpServerTool(Name = "health_check", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Проверка соединения с backend GymAssistant (требует scope profile:read). Возвращает API URL, имя пользователя и подтверждение валидности PAT.")]
+     Description("Проверка соединения с backend GymAssistant. Возвращает API URL, имя пользователя и подтверждение валидности PAT. Scope: profile:read.")]
     public static async Task<object> HealthCheckAsync(
         GymClient client,
         EnvConfig config,

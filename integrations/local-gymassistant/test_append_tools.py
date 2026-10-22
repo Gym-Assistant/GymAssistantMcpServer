@@ -40,7 +40,9 @@ class AppendTests(unittest.TestCase):
 
     def get(self, path, params=None):
         if path == '/auth/me': return {'id': OWNER}
-        if path == '/plans': return {'items': [copy.deepcopy(self.plan)], 'total': 1}
+        if path == f'/plans/{PLAN}': return copy.deepcopy(self.plan)
+        if path.startswith('/plans/'):
+            raise urllib.error.HTTPError(f'http://localhost/api{path}', 404, 'Not Found', {}, None)
         if path == '/exercises': return {'items': [{'id': PERSONAL, 'globalId': GLOBAL, 'name': 'Жим'}], 'total': 1}
         if path == '/exercises/defaults': return {'items': [{'globalId': DEFAULT, 'name': 'Присед'}], 'total': 1}
         raise AssertionError(path)
@@ -93,6 +95,12 @@ class AppendTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.call(expected_updated_at='2026-10-20T00:00:00Z')
         self.plan['authorUserId'] = OTHER
         with self.assertRaises(ValueError): self.call()
+        self.assertEqual(self.posts, [])
+        self.assertEqual(self.backups, [])
+
+    def test_missing_plan_is_not_found_and_never_written(self):
+        with self.assertRaisesRegex(ValueError, 'не найден'):
+            self.call(plan_id=UUID(OTHER))
         self.assertEqual(self.posts, [])
         self.assertEqual(self.backups, [])
 

@@ -13,6 +13,11 @@ requests = []
 posts = []
 PLAN_ID = '11111111-1111-1111-1111-111111111111'
 MEASUREMENT = {'trackingType':'interval','rounds':5,'workSeconds':30,'recoverySeconds':60}
+CATALOG = {'globalId':PLAN_ID,'name':'Шаблон','nameEn':'Template','isHidden':True,
+           'canonicalId':'22222222-2222-2222-2222-222222222222', 'loadConvention':'per_implement',
+           'groupCode':'chest','isUnilateral':False,'aliasesEn':['Alternate name'],
+           'muscles':[{'muscleCode':'chest','loadPercent':70,'role':'primary'}],
+           'media':[{'kind':'image','url':'https://example.test/template.webp'}]}
 PLAN = {'id':PLAN_ID,'updatedAt':'2026-10-22T09:00:00Z','templates':[
     {'title':'Интервалы','exercises':[{'sets':[{'number':1,'measurement':MEASUREMENT},
                                              {'number':2,'reps':10,'targetWeight':80}]}]}]}
@@ -34,6 +39,10 @@ class Backend(BaseHTTPRequestHandler):
             payload = [{'snapshot': {'day':'2026-10-17','timeZone':'Asia/Krasnoyarsk','readAt':'2026-10-17T12:00:00Z','values':{'steps':1234,'protein':None}},'deviceId':PLAN_ID,'receivedAt':'2026-10-17T12:01:00Z'}]
         elif self.path == f'/api/plans/{PLAN_ID}':
             payload = PLAN
+        elif self.path == f'/api/exercises/defaults/{PLAN_ID}':
+            payload = CATALOG
+        elif self.path == '/api/exercises/defaults?offset=0&limit=200&includeHidden=true':
+            payload = {'items':[CATALOG],'total':1}
         else:
             self.respond(404); return
         self.respond(200, payload)
@@ -113,9 +122,19 @@ async def verify(command, url):
         read_text = json.dumps(read).lower()
         assert all(field in read_text for field in ('trackingtype','interval','workseconds','recoveryseconds','targetweight'))
         assert len(posts)==2, 'Unexpected write or retry'
-        await call(8,'ping',{})
+        schema = json.dumps(schemas['create_exercise']).lower()
+        assert all(field in schema for field in ('nameen','aliasesen','loadconvention','isunilateral','media','role'))
+        hidden = await call(8,'tools/call',{'name':'get_default_exercise','arguments':{'globalId':PLAN_ID}})
+        assert not hidden.get('isError',False), hidden
+        hidden_text = ' '.join(x['text'] for x in hidden['content'] if x['type']=='text')
+        assert all(field in hidden_text for field in ('per_implement','primary','template.webp','canonicalId'))
+        catalog = await call(9,'tools/call',{'name':'list_default_exercises','arguments':{'includeHidden':True}})
+        assert not catalog.get('isError',False), catalog
+        assert requests[-1][0] == '/api/exercises/defaults?offset=0&limit=200&includeHidden=true'
+        assert len(posts)==2, 'Catalog reading performed a write'
+        await call(10,'ping',{})
         print(json.dumps({'initialize':True,'tools':len(names),'health_check':True,
-                          'health_daily':True,'typed_create_append_read':True,'legacy_sets_preserved':True,'profile_pat_forwarded':True,'stdout_jsonrpc':True,'backend':'synthetic'}))
+                          'health_daily':True,'catalog_metadata_hidden_read':True,'typed_create_append_read':True,'legacy_sets_preserved':True,'profile_pat_forwarded':True,'stdout_jsonrpc':True,'backend':'synthetic'}))
     finally:
         process.stdin.close()
         try: await asyncio.wait_for(process.wait(),10)

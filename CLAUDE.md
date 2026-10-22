@@ -37,4 +37,4 @@
 ## NuGet
 - `GymAssistant.Client` — NSwag-generated, hosted at GitHub Packages (`nuget.pkg.github.com/Gym-Assistant`). Source name `gym` in `nuget.config`. Read access via user-level `~/.nuget/NuGet/NuGet.Config` locally; via `secrets.GITHUB_TOKEN` in CI.
 - Lock file `packages.lock.json` is committed — Docker builds use `--locked-mode`.
-- Pinned to `0.7.*` for reproducible builds.
+- Pinned to an exact version (`0.13.0`, see `src/GymAssistant.McpServer/GymAssistant.McpServer.csproj`) for reproducible builds. Bump it together with `packages.lock.json`, the README compatibility section and the scope mapping in `ToolAccessContractTests`.

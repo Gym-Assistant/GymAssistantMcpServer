@@ -53,7 +53,7 @@ def build_records(workouts, exercises, top_n, workout_date, epley):
     for workout in workouts:
         for session in workout.get('trainSessions') or []:
             for entry in session.get('sets') or []:
-                if entry.get('isDone') and strength_set(entry):
+                if entry.get('isDone') and entry.get('isWarmup') is not True and strength_set(entry):
                     key = session.get('exerciseId', '')
                     max_weight[key] = max(max_weight[key], entry.get('weight') or 0)
     records = {}
@@ -62,11 +62,11 @@ def build_records(workouts, exercises, top_n, workout_date, epley):
             exercise_id = session.get('exerciseId', '')
             name = exercises.get(exercise_id, {}).get('name', '?')
             for entry in session.get('sets') or []:
-                if not entry.get('isDone') or not strength_set(entry):
+                if not entry.get('isDone') or entry.get('isWarmup') is True or not strength_set(entry):
                     continue
                 weight, reps = entry.get('weight') or 0, entry.get('reps') or 0
-                # Сохраняем прежний фильтр разминки и формулу для старых записей.
-                if max_weight[exercise_id] > 0 and weight / max_weight[exercise_id] < 0.6 and reps > 12:
+                # Явный флаг разминки важнее эвристики; отсутствие флага сохраняет прежнее поведение.
+                if entry.get('isWarmup') is None and max_weight[exercise_id] > 0 and weight / max_weight[exercise_id] < 0.6 and reps > 12:
                     continue
                 rm = epley(weight, reps)
                 current = records.get(name)

@@ -31,14 +31,35 @@ jobs:
       - name: Test
         run: dotnet test -c Release --no-build
 
-      - name: Local MCP measurement and legacy contracts
-        run: |
-          python3 -m venv /tmp/gym-mcp-tests
-          /tmp/gym-mcp-tests/bin/pip install 'mcp==1.27.1' 'pydantic==2.13.4'
-          /tmp/gym-mcp-tests/bin/python -m unittest discover -s integrations/local-gymassistant -v
-
       - name: Real stdio initialize, tools and health check
         run: python3 scripts/verify-stdio.py dotnet src/GymAssistant.McpServer/bin/Release/net10.0/GymAssistant.McpServer.dll
+
+  python:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: integrations/local-gymassistant/requirements.txt
+
+      - name: Install pinned requirements
+        run: python -m pip install --disable-pip-version-check -r integrations/local-gymassistant/requirements.txt
+
+      - name: Unit tests
+        run: python -m unittest discover -s integrations/local-gymassistant -v
+
+      - name: Real stdio on synthetic API (workouts, records, Health)
+        run: python integrations/local-gymassistant/verify_stdio.py
+
+      - name: Real stdio on synthetic API (plans)
+        run: python integrations/local-gymassistant/verify_plans_stdio.py
 
   docker:
     runs-on: ubuntu-latest

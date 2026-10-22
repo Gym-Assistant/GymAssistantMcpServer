@@ -4,12 +4,19 @@ from health_tools import register_health_tools, same_account_reader
 
 
 class Registry:
+    def __init__(self):
+        self.functions = {}
+        self.annotations = {}
+
     def tool(self, **kwargs):
-        self.annotations = kwargs['annotations']
         def register(fn):
-            self.call = fn
+            self.functions[fn.__name__] = fn
+            self.annotations[fn.__name__] = kwargs['annotations']
             return fn
         return register
+
+    def call(self, *args):
+        return self.functions['gym_health_daily'](*args)
 
 
 class HealthToolsTests(unittest.TestCase):
@@ -17,7 +24,7 @@ class HealthToolsTests(unittest.TestCase):
         self.registry = Registry()
         self.calls = []
         self.data = [{'snapshot': {'day': '2026-10-17', 'values': {'steps': 23, 'protein': None}}, 'receivedAt': '2026-10-17T12:00:00Z'}]
-        def get(path, params):
+        def get(path, params=None):
             self.calls.append((path, params))
             return self.data
         register_health_tools(self.registry, get)
@@ -26,8 +33,16 @@ class HealthToolsTests(unittest.TestCase):
         result = self.registry.call('2026-09-17', '2026-10-17')
         self.assertIs(result, self.data)
         self.assertEqual(self.calls, [('/health/apple/daily', {'from': '2026-09-17', 'to': '2026-10-17'})])
-        self.assertTrue(self.registry.annotations.readOnlyHint)
-        self.assertFalse(self.registry.annotations.destructiveHint)
+        self.assertTrue(self.registry.annotations['gym_health_daily'].readOnlyHint)
+        self.assertFalse(self.registry.annotations['gym_health_daily'].destructiveHint)
+
+    def test_metric_catalog_is_forwarded_read_only(self):
+        catalog = {'metrics': [{'key': 'steps', 'unit': 'count', 'aggregation': 'sum'}]}
+        self.data = catalog
+        self.assertIs(self.registry.functions['gym_health_metrics'](), catalog)
+        self.assertEqual(self.calls, [('/health/apple/metrics', None)])
+        self.assertTrue(self.registry.annotations['gym_health_metrics'].readOnlyHint)
+        self.assertEqual(set(self.registry.functions), {'gym_health_daily', 'gym_health_metrics'})
 
     def test_invalid_period_does_not_call_api(self):
         for start, end in [('2026-09-16', '2026-10-17'), ('2026-10-18', '2026-10-17'), ('20261017', '2026-10-17'), ('2026-02-30', '2026-10-17')]:
