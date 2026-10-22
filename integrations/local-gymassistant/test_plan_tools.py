@@ -315,6 +315,7 @@ class PlanToolsTests(unittest.TestCase):
     def test_catalog_read_preserves_metadata_and_hidden_identity(self):
         item = self.data['/exercises/defaults'][0]
         item.update({'nameEn': 'Pull-up', 'descriptionEn': 'Controlled movement',
+                     'templateRevision': 'ga043-2026-10-22-v1',
                      'aliasesEn': ['Pull up'], 'groupCode': 'back', 'loadConvention': 'total',
                      'isUnilateral': False, 'isHidden': True, 'canonicalId': GLOBAL,
                      'muscles': [{'muscleCode': 'lats', 'role': 'primary', 'loadPercent': 70}],
@@ -329,6 +330,23 @@ class PlanToolsTests(unittest.TestCase):
         self.assertEqual(result, item)
         self.assertEqual(self.calls[-1], ('/exercises/defaults/' + DEFAULT, None))
         self.assertEqual(result['globalId'], DEFAULT)
+        self.assertEqual(self.posts, [])
+
+    def test_personal_provenance_roundtrip_keeps_identity_and_legacy_absence(self):
+        item = self.data['/exercises'][0]
+        legacy = copy.deepcopy(item)
+        result = self.registry.functions['gym_exercises'](source='personal')
+        self.assertEqual(result['items'][0], legacy)
+        self.assertNotIn('templateRevision', result['items'][0])
+        self.assertNotIn('templateOverrides', result['items'][0])
+        for overrides in (None, [], ['name', 'loadConvention']):
+            item.update({'templateRevision': 'ga043-2026-10-22-v1', 'templateOverrides': overrides,
+                         'loadConvention': None, 'oneRepMax': 97.5, 'gymIds': ['fixture-gym']})
+            with self.subTest(overrides=overrides):
+                result = self.registry.functions['gym_exercises'](source='personal')['items'][0]
+                self.assertEqual(result, item)
+                self.assertEqual(result['id'], PERSONAL)
+                self.assertEqual(result['globalId'], GLOBAL)
         self.assertEqual(self.posts, [])
 
     def test_catalog_default_call_remains_compatible_and_hidden_option_is_not_ignored(self):
