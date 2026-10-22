@@ -47,10 +47,31 @@ production Swagger backend 0.17.1 (workflow 39751994762).
 - Настоящий .NET stdio: 43 команды, mixed create → append → read, Health и
   неизменность старых подходов PASS на loopback API.
 
-## Следующий шаг
+## Выпуск
 
-Завершить Docker/CI и публикацию MCP v0.3.0. Старая открытая сессия Mentoru требует
-переподключения и не считается обновлённой только по изменению файлов.
+- [PR #7](https://github.com/Gym-Assistant/GymAssistantMcpServer/pull/7) слит:
+  `e3c67de05019ec268801471e823d11d794e2d312`.
+- [CI PR](https://github.com/Gym-Assistant/GymAssistantMcpServer/actions/runs/39768451777)
+  и [CI main](https://github.com/Gym-Assistant/GymAssistantMcpServer/actions/runs/39768701068)
+  успешно завершены. Отдельное статическое ревью без блокирующих замечаний.
+- Локальный Docker arm64: non-root UID 1654, 43 команды; typed create/append/read,
+  прежние подходы и Health проходят настоящий stdio. Docker amd64 проверен в CI.
+- [Релиз v0.3.0](https://github.com/Gym-Assistant/GymAssistantMcpServer/releases/tag/v0.3.0)
+  опубликован 22.10.2026 в 11:14:37 UTC;
+  [workflow](https://github.com/Gym-Assistant/GymAssistantMcpServer/actions/runs/39768779596)
+  завершён успешно.
+- Registry подтверждает теги `0.3.0` и `latest`, индекс
+  `sha256:8f0a787029b55bbbbcffb923fc24661e60094990343e3a0d323422baf130f841`;
+  `docker buildx imagetools inspect` подтверждает linux/amd64 и linux/arm64.
+- Скачанный опубликованный образ по этому digest отдельно прошёл настоящий stdio:
+  43 команды, health_check, Health, typed create → append → read, прежние подходы.
+  API приёмки синтетический, production-записей нет.
+
+## Следующий шаг и откат
+
+Старая открытая сессия Mentoru требует переподключения и не считается обновлённой
+только по изменению файлов. На свежем установленном процессе контракт и чтение
+планов подтверждены; пользовательские данные для проверки не создавались.
 Для отката локальной интеграции восстановить `server.py` и `plan_tools.py` из
 указанной приватной копии; `workout_tools.py` можно оставить неиспользуемым.
 Права ключа и данные тренировок при таком откате не меняются.
