@@ -20,6 +20,7 @@ from uuid import UUID
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from install_plans import measurement_source
 
 
 INSTALLED = Path.home() / 'tools/gymassistant-mcp'
@@ -45,6 +46,12 @@ HEALTH = [{
     'receivedAt': '2026-10-20T21:01:00Z', 'deviceId': 'fixture-phone',
 }]
 METRICS = {'metrics': [{'key': 'steps', 'unit': 'count', 'aggregation': 'sum'}]}
+WORKOUT = {'id': 'fixture-workout', 'trainSessions': [{'exerciseId': PERSONAL, 'sets': [
+    {'number': 1, 'isDone': True, 'weight': 80, 'reps': 10, 'createdAt': '2026-10-20T10:00:00Z'},
+    {'number': 2, 'isDone': True, 'weight': 200, 'reps': 100, 'createdAt': '2026-10-20T10:00:00Z',
+     'measurement': {'trackingType': 'cardio', 'durationSeconds': 120, 'distanceMeters': 500}},
+]}]}
+
 
 
 class Fixture:
@@ -90,12 +97,14 @@ class Fixture:
                     result = {'id': OWNER, 'username': 'synthetic'}
                 elif parsed.path in ('/api/exercises', '/api/exercises/defaults', '/api/plans'):
                     items = {
-                        '/api/exercises': [{'id': PERSONAL, 'name': 'Личное упражнение', 'isDeleted': False}],
+                        '/api/exercises': [{'id': PERSONAL, 'name': 'Личное упражнение', 'isDeleted': False, 'trackingType': 'cardio'}],
                         '/api/exercises/defaults': [{'globalId': DEFAULT, 'name': 'Базовое упражнение'}],
                         '/api/plans': fixture.plans,
                     }[parsed.path]
                     offset, limit = int(query.get('offset', [0])[0]), int(query.get('limit', [100])[0])
                     result = {'items': items[offset:offset + limit], 'total': len(items)}
+                elif parsed.path == '/api/workouts':
+                    result = {'items': [WORKOUT], 'total': 1}
                 elif parsed.path == '/api/health/apple/daily':
                     assert query == {'from': ['2026-10-20'], 'to': ['2026-10-20']}
                     result = HEALTH
@@ -220,7 +229,8 @@ def assert_payload(plan, request, returned_id):
             for number, (actual, expected) in enumerate(zip(nested['sets'], exercise['sets']), 1):
                 all_nodes.append(actual)
                 assert actual['planTemplateExerciseId'] == nested['id'] and actual['number'] == number
-                assert actual['reps'] == expected['reps']
+                assert actual['reps'] == expected.get('reps', 0)
+                assert actual.get('measurement') == expected.get('measurement')
                 assert actual['targetWeight'] == expected.get('weight')
                 assert actual['targetWeightPercent'] == expected.get('weight_percent')
                 assert actual['weightUnit'] == expected.get('unit', 'kg')
@@ -248,10 +258,10 @@ async def verify(server_path, port, fixture, error_log):
     source = server_path.read_text()
     marker = 'if __name__ == "__main__":'
     assert source.count(marker) == 1 and 'register_plan_tools(' not in source
-    server_path.write_text(source.replace(marker,
+    server_path.write_text(measurement_source(source.replace(marker,
         'from plan_tools import register_plan_tools, make_plan_writer, make_plan_appender\n'
         'register_plan_tools(mcp, _api_get, make_plan_writer(API_URL, TOKEN), '
-        'make_plan_appender(API_URL, TOKEN))\n\n' + marker))
+        'make_plan_appender(API_URL, TOKEN))\n\n' + marker)))
 
     async with connection(server_path, port, error_log) as session:
         listed = {tool.name: tool.model_dump() for tool in (await session.list_tools()).tools}
@@ -285,7 +295,8 @@ async def verify(server_path, port, fixture, error_log):
                 ]},
                 {'title': 'День Б', 'description': '', 'exercises': [
                     {'user_exercise_id': PERSONAL, 'comment': 'Повтор упражнения', 'sets': [
-                        {'reps': 15, 'weight': 0}, {'reps': 12},
+                        {'measurement': {'trackingType': 'cardio', 'durationSeconds': 120, 'distanceMeters': 500}},
+                        {'measurement': {'trackingType': 'interval', 'rounds': 5, 'workSeconds': 30, 'recoverySeconds': 60}},
                     ]},
                 ]},
             ],
@@ -399,6 +410,25 @@ async def verify(server_path, port, fixture, error_log):
             rejected = await session.call_tool('gym_append_plan_days', bad)
             assert rejected.isError and len(fixture.append_posts) == 4
 
+        typed_request = {'plan_id': created['plan_id'], 'expected_updated_at': saved['updatedAt'],
+                         'days': [deepcopy(request['days'][1])]}
+        before_typed = deepcopy(saved)
+        typed_result = unpack(await session.call_tool('gym_append_plan_days', typed_request))
+        assert typed_result['status'] == 'appended'
+        saved = unpack(await session.call_tool('gym_plan', {'plan_id': created['plan_id']}))
+        assert saved['templates'][:-1] == before_typed['templates']
+        assert [s['measurement'] for s in saved['templates'][-1]['exercises'][0]['sets']] == [
+            s['measurement'] for s in request['days'][1]['exercises'][0]['sets']]
+        assert len(fixture.backups_verified) == len(fixture.append_posts) == 5
+
+        summary = unpack(await session.call_tool('gym_workout', {'workout_date': '2026-10-20'}))
+        assert summary['volume_kg'] == 800 and summary['sets_count'] == 2
+        assert summary['exercises'][0]['trackingType'] == 'cardio'
+        assert summary['exercises'][0]['sets'][1]['measurement'] == WORKOUT['trainSessions'][0]['sets'][1]['measurement']
+        assert unpack(await session.call_tool('gym_workouts'))[0] == summary
+        records = unpack(await session.call_tool('gym_records'))
+        assert len(records) == 1 and records[0]['weight'] == 80 and records[0]['rm'] == 106.7
+
         assert unpack(await session.call_tool('gym_health_daily', {
             'from_date': '2026-10-20', 'to_date': '2026-10-20'})) == health_before
         assert unpack(await session.call_tool('gym_health_metrics')) == metrics_before
@@ -417,6 +447,7 @@ async def verify(server_path, port, fixture, error_log):
                 'backup_before_every_append': True, 'append_backups_verified': len(fixture.backups_verified),
                 'stale_append_blocked_before_post': True, 'append_409_no_retry': True,
                 'append_malformed_and_500_no_retry': True,
+                'typed_create_append_read': True, 'typed_workout_read': True, 'record_guard': True,
                 'health_unchanged': True, 'production_requests': 0}
 
 
@@ -443,6 +474,7 @@ def main():
             server_path.write_text(source)
             shutil.copyfile(INSTALLED / 'health_tools.py', temporary / 'health_tools.py')
             shutil.copyfile(Path(__file__).with_name('plan_tools.py'), temporary / 'plan_tools.py')
+            shutil.copyfile(Path(__file__).with_name('workout_tools.py'), temporary / 'workout_tools.py')
             with (temporary / 'stderr.log').open('w+') as error_log:
                 result = asyncio.run(asyncio.wait_for(
                     verify(server_path, server.server_port, fixture, error_log), timeout=60))

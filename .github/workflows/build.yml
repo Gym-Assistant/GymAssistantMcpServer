@@ -31,6 +31,12 @@ jobs:
       - name: Test
         run: dotnet test -c Release --no-build
 
+      - name: Local MCP measurement and legacy contracts
+        run: |
+          python3 -m venv /tmp/gym-mcp-tests
+          /tmp/gym-mcp-tests/bin/pip install 'mcp==1.27.1' 'pydantic==2.13.4'
+          /tmp/gym-mcp-tests/bin/python -m unittest discover -s integrations/local-gymassistant -v
+
       - name: Real stdio initialize, tools and health check
         run: python3 scripts/verify-stdio.py dotnet src/GymAssistant.McpServer/bin/Release/net10.0/GymAssistant.McpServer.dll
 

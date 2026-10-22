@@ -17,8 +17,49 @@ class Input(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True, allow_inf_nan=False)
 
 
+REPS_TYPES = {'weight_reps', 'bodyweight_reps', 'assisted_reps', 'band_reps'}
+
+
+class SetMeasurement(Input):
+    """Дополнительные значения API: секунды, метры, кг помощи и сантиметры."""
+    trackingType: Literal['weight_reps', 'bodyweight_reps', 'assisted_reps', 'band_reps',
+                          'duration', 'cardio', 'weight_distance', 'interval']
+    durationSeconds: int | None = Field(default=None, ge=0, le=604800)
+    distanceMeters: float | None = Field(default=None, ge=0, le=1000000)
+    assistanceWeight: float | None = Field(default=None, ge=0, le=10000)
+    resistanceLevel: str | None = Field(default=None, min_length=1, max_length=80)
+    inclinePercent: float | None = Field(default=None, ge=-100, le=100)
+    heightCm: float | None = Field(default=None, ge=0, le=1000)
+    rounds: int | None = Field(default=None, ge=0, le=10000)
+    workSeconds: int | None = Field(default=None, ge=0, le=604800)
+    recoverySeconds: int | None = Field(default=None, ge=0, le=604800)
+    side: Literal['left', 'right', 'both'] | None = None
+
+    @model_validator(mode='after')
+    def compatible_values(self):
+        allowed = {
+            'durationSeconds': {'duration', 'cardio', 'weight_distance', 'interval'},
+            'distanceMeters': {'cardio', 'weight_distance'},
+            'assistanceWeight': {'assisted_reps'},
+            'resistanceLevel': {'band_reps', 'cardio', 'assisted_reps'},
+            'inclinePercent': {'cardio'},
+            'heightCm': {'weight_reps', 'bodyweight_reps'},
+            'rounds': {'interval'}, 'workSeconds': {'interval'}, 'recoverySeconds': {'interval'},
+        }
+        for field, types in allowed.items():
+            if getattr(self, field) is not None and self.trackingType not in types:
+                raise ValueError(f'{field} не применяется к {self.trackingType}.')
+        if self.trackingType in {'duration', 'cardio', 'weight_distance'}:
+            if not ((self.durationSeconds or 0) > 0 or (self.distanceMeters or 0) > 0):
+                raise ValueError('Укажите время или дистанцию больше нуля.')
+        if self.trackingType == 'interval' and not ((self.rounds or 0) > 0 and (self.workSeconds or 0) > 0):
+            raise ValueError('Укажите количество интервалов и длительность работы больше нуля.')
+        return self
+
+
 class PlanSet(Input):
-    reps: int = Field(ge=1)
+    reps: int | None = Field(default=None, ge=0, description='Повторы для силовых подходов; для времени/дистанции/интервалов можно не задавать.')
+    measurement: SetMeasurement | None = None
     weight: float | None = Field(default=None, ge=0, description='Вес; null — не задан, 0 — без внешнего веса.')
     weight_percent: float | None = Field(default=None, gt=0, le=200, description='Процент 1RM вместо абсолютного веса.')
     unit: Literal['kg', 'lb'] = 'kg'
@@ -30,6 +71,8 @@ class PlanSet(Input):
     def weight_mode(self):
         if self.weight is not None and self.weight_percent is not None:
             raise ValueError('Укажите либо вес, либо процент 1RM.')
+        if (self.measurement is None or self.measurement.trackingType in REPS_TYPES) and not (self.reps and self.reps > 0):
+            raise ValueError('Для силового подхода укажите повторы больше нуля.')
         return self
 
 
@@ -131,7 +174,8 @@ def _add_days(plan, days, indexes, audit, existing_pool=()):
             template['exercises'].append(nested)
             for number, s in enumerate(exercise.sets, 1):
                 nested['sets'].append({'id': str(uuid4()), 'planTemplateExerciseId': nested_id,
-                                      'number': number, 'reps': s.reps, 'targetWeight': s.weight,
+                                      'number': number, 'reps': s.reps if s.reps is not None else 0, 'targetWeight': s.weight,
+                                      **({'measurement': s.measurement.model_dump(exclude_none=True)} if s.measurement else {}),
                                       'targetWeightPercent': s.weight_percent, 'weightUnit': s.unit,
                                       'targetRpe': s.rpe, 'setType': 1 if s.warmup else 0,
                                       'restSecondsOverride': s.rest_seconds, **audit})
@@ -182,6 +226,10 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
         Все ID плана генерируются заново; существующие планы не обновляются.
         План не публикуется и не назначается активным. Вес: kg/lb; отдых: секунды;
         warmup=true — разминка. Комментарии к упражнению — comment.
+        Новый формат задаётся в sets[].measurement: trackingType и значения API
+        (durationSeconds, distanceMeters, assistanceWeight в кг, rounds/workSeconds/
+        recoverySeconds). Для кардио/времени/интервалов reps не обязателен.
+        Старые подходы без measurement сохраняют смысл веса и повторов.
         Если status=unknown, проверь plan_id через gym_plan; НЕ повторяй создание,
         пока не выяснен результат. status=created означает успешный ответ сервера.
         """
@@ -234,6 +282,7 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
         409 означает изменение плана: перечитай его и согласуй следующие действия.
         При status=unknown проверь added_day_ids через gym_plan; не повторяй вслепую.
         Это дни-шаблоны, не тренировки в календаре: date отсутствует в модели API.
+        Новые форматы — sets[].measurement как в gym_create_plan; прежние дни не пересчитываются.
         """
         days = [PlanDay.model_validate(day) for day in days]
         if not days:

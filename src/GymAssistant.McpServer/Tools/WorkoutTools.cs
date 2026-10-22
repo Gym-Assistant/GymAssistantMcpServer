@@ -44,13 +44,13 @@ public static class WorkoutTools
         => client.SaveWorkoutAsync(body, ct);
 
     [McpServerTool(Name = "update_set", Destructive = true),
-     Description("Обновить один подход (Set) внутри тренировочной сессии — частичный patch полей Reps, Weight, IsDone, Number. Scope: workouts:write.")]
+     Description("Обновить один подход (Set) внутри тренировочной сессии — частичный patch полей Reps, Weight, IsDone, IsWarmup, Number, Measurement. Measurement содержит тип и значения конкретного подхода. Scope: workouts:write.")]
     public static Task<SetViewModel> UpdateSetAsync(
         GymClient client,
         [Description("ID тренировки (workoutId)")] Guid workoutId,
         [Description("ID тренировочной сессии (trainSessionId)")] Guid sessionId,
         [Description("ID подхода (setId)")] Guid setId,
-        [Description("Частичные изменения подхода (SetPatchViewModel): Reps, Weight, IsDone, Number — любые из полей")]
+        [Description("Частичные изменения подхода (SetPatchViewModel): Reps, Weight, IsDone, IsWarmup, Number, Measurement. Неуказанные поля сохраняются. Measurement: секунды, метры, килограммы помощи; без Measurement старые Reps/Weight сохраняют прежний смысл")]
         SetPatchViewModel body,
         CancellationToken ct)
         => client.PatchSetAsync(workoutId, sessionId, setId, body, ct);

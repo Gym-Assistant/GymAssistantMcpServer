@@ -36,21 +36,21 @@ public static class ExerciseTools
         => client.GetExerciseCatalogsAsync(ct);
 
     [McpServerTool(Name = "list_muscles", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Справочник мышц (ExerciseCatalogItemViewModel: Code, Name и пр.) для назначения нагрузок на упражнения. Scope: exercises:read.")]
+     Description("Справочник мышц (ExerciseCatalogItemViewModel: Code, Name, ParentCode и пр.) для назначения нагрузок на упражнения. Scope: exercises:read.")]
     public static Task<ICollection<ExerciseCatalogItemViewModel>> ListMusclesAsync(
         GymClient client,
         CancellationToken ct)
         => client.GetMusclesAsync(ct);
 
     [McpServerTool(Name = "list_equipment", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Справочник оборудования (ExerciseCatalogItemViewModel: Code, Name и пр.) для привязки к упражнениям. Scope: exercises:read.")]
+     Description("Справочник оборудования (ExerciseCatalogItemViewModel: Code, Name, ParentCode и пр.) для привязки к упражнениям. Scope: exercises:read.")]
     public static Task<ICollection<ExerciseCatalogItemViewModel>> ListEquipmentAsync(
         GymClient client,
         CancellationToken ct)
         => client.GetEquipmentAsync(ct);
 
     [McpServerTool(Name = "create_exercise", Destructive = true),
-     Description("Создать или обновить упражнение пользователя (Upsert по Id). Передаётся полный ExerciseViewModel с Muscles/Equipment. Scope: exercises:write.")]
+     Description("Создать или обновить упражнение пользователя (Upsert по Id). Передаётся полный ExerciseViewModel с Muscles/Equipment и TrackingType. TrackingType определяет ввод новых подходов и не меняет смысл старых. Scope: exercises:write.")]
     public static Task CreateExerciseAsync(
         GymClient client,
         [Description("Полный объект упражнения (ExerciseViewModel). Сервер выполняет upsert по Id.")]
