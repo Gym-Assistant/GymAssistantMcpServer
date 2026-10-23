@@ -68,8 +68,10 @@ class Backend(BaseHTTPRequestHandler):
 
 async def verify(command, url):
     env = {**os.environ, 'GYM_API_TOKEN':TOKEN,'GYM_API_URL':url,'GYM_LOG_LEVEL':'Warning'}
+    # tools/list is one JSON-RPC line; the full schema exceeds asyncio's 64 KiB default.
     process = await asyncio.create_subprocess_exec(*command,stdin=asyncio.subprocess.PIPE,
-              stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE,env=env)
+              stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE,env=env,
+              limit=1024 * 1024)
     stderr = asyncio.create_task(process.stderr.read())
     async def send(value):
         process.stdin.write((json.dumps(value)+'\n').encode()); await process.stdin.drain()

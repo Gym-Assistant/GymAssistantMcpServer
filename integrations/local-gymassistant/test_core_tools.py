@@ -133,6 +133,18 @@ class LoadWorkoutsTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+class GymWorkoutsCommentsTests(unittest.TestCase):
+    def test_latest_note_only_workout_beyond_first_page_is_kept(self):
+        history = [workout(i, started='2026-09-01T05:00:00Z') for i in range(110)]
+        note = workout(200, started='2026-10-23T05:00:00Z', sets=[])
+        note['comment'] = 'Пропустил тренировку'
+        history.append(note)
+        result = tools(Backend(history))['gym_workouts'](1)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['id'], note['id'])
+        self.assertEqual(result[0]['comment'], note['comment'])
+        self.assertEqual(result[0]['sets_count'], 0)
+
 class GymWorkoutTests(unittest.TestCase):
     def test_finds_workout_older_than_last_fifty(self):
         history = [workout(i, started=f'2026-09-{1 + i % 28:02d}T05:00:00Z') for i in range(180)]

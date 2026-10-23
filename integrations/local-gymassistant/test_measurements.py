@@ -96,7 +96,7 @@ class WorkoutMeasurementTests(unittest.TestCase):
         self.assertEqual(result['sets_count'], 2)
         self.assertEqual(result['exercises'][0]['trackingType'], 'cardio')
         self.assertEqual(result['exercises'][0]['sets'][1]['measurement'], workout['trainSessions'][0]['sets'][1]['measurement'])
-        self.assertEqual(result['exercises'][0]['top'], {'weight': 80, 'reps': 10})
+        self.assertEqual(result['exercises'][0]['top'], {'weight': 80, 'reps': 10, 'number': 1, 'isDone': True})
         result['exercises'][0]['sets'][1]['measurement']['futureField']['samples'].append(3)
         self.assertEqual(workout, original)
 
