@@ -14,6 +14,9 @@ def strength_set(entry):
 
 def set_result(entry):
     result = {'weight': entry.get('weight', 0), 'reps': entry.get('reps', 0)}
+    for field in ('id', 'number', 'isDone', 'isWarmup', 'comment'):
+        if field in entry:
+            result[field] = entry[field]
     if 'measurement' in entry:
         result['measurement'] = deepcopy(entry['measurement'])
     return result
@@ -35,6 +38,7 @@ def summarize_workout(workout, exercises, workout_date):
         total_volume += exercise_volume
         top = max(strength, key=volume) if strength else None
         item = {
+            'session_id': session.get('id'), 'exercise_id': session.get('exerciseId'),
             'name': exercise.get('name', '?'), 'sets': [set_result(s) for s in sets],
             'volume_kg': exercise_volume, 'top': set_result(top) if top else None,
         }
@@ -43,6 +47,15 @@ def summarize_workout(workout, exercises, workout_date):
         by_ex.append(item)
     return {
         'id': workout.get('id'), 'date': workout_date(workout),
+        'comment': workout.get('comment'),
+        'set_comments': [
+            {'session_id': session.get('id'), 'exercise_id': session.get('exerciseId'),
+             'exercise': exercises.get(session.get('exerciseId', ''), {}).get('name', '?'),
+             'set_id': entry.get('id'), 'number': entry.get('number'),
+             'is_done': entry.get('isDone', False), 'comment': entry['comment']}
+            for session in workout.get('trainSessions') or []
+            for entry in session.get('sets') or [] if entry.get('comment')
+        ],
         'exercises_count': len(by_ex), 'sets_count': total_sets,
         'volume_kg': round(total_volume, 1), 'exercises': by_ex,
     }

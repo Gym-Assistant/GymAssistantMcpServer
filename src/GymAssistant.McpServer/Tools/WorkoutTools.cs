@@ -8,7 +8,7 @@ namespace GymAssistant.McpServer.Tools;
 public static class WorkoutTools
 {
     [McpServerTool(Name = "list_workouts", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Список тренировок пользователя с пагинацией (новые сверху). Каждая тренировка содержит TrainSessions с подходами. Scope: workouts:read.")]
+     Description("Список тренировок пользователя с пагинацией (новые сверху). Каждая тренировка содержит TrainSessions с подходами, Comment тренировки и Comment каждого подхода. Это заметки пользователя, учитывай их при анализе. Scope: workouts:read.")]
     public static Task<WorkoutViewModelPaged> ListWorkoutsAsync(
         GymClient client,
         CancellationToken ct,
@@ -17,7 +17,7 @@ public static class WorkoutTools
         => client.GetUserWorkoutsAsync(offset, limit, null, null, ct);
 
     [McpServerTool(Name = "get_workout", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Получить тренировку по id со всеми тренировочными сессиями (TrainSessions) и подходами (Sets). Scope: workouts:read.")]
+     Description("Получить тренировку по id со всеми тренировочными сессиями (TrainSessions) и подходами (Sets), включая Comment тренировки и подходов. Scope: workouts:read.")]
     public static Task<WorkoutViewModel> GetWorkoutAsync(
         GymClient client,
         [Description("ID тренировки")] Guid id,
@@ -45,13 +45,13 @@ public static class WorkoutTools
         => client.SaveWorkoutAsync(body, ct);
 
     [McpServerTool(Name = "update_set", Destructive = true),
-     Description("Обновить один подход (Set) внутри тренировочной сессии — частичный patch полей Reps, Weight, IsDone, IsWarmup, Number, Measurement. Measurement содержит тип и значения конкретного подхода. Scope: workouts:write.")]
+     Description("Обновить один подход (Set) внутри тренировочной сессии — частичный patch полей Reps, Weight, IsDone, IsWarmup, Number, Measurement, Comment. Comment — заметка пользователя; null сохраняет, пустая строка очищает. Measurement содержит тип и значения конкретного подхода. Scope: workouts:write.")]
     public static Task<SetViewModel> UpdateSetAsync(
         GymClient client,
         [Description("ID тренировки (workoutId)")] Guid workoutId,
         [Description("ID тренировочной сессии (trainSessionId)")] Guid sessionId,
         [Description("ID подхода (setId)")] Guid setId,
-        [Description("Частичные изменения подхода (SetPatchViewModel): Reps, Weight, IsDone, IsWarmup, Number, Measurement. Неуказанные поля сохраняются. Measurement: секунды, метры, килограммы помощи; без Measurement старые Reps/Weight сохраняют прежний смысл")]
+        [Description("Частичные изменения подхода (SetPatchViewModel): Reps, Weight, IsDone, IsWarmup, Number, Measurement, Comment. Comment — заметка пользователя; null сохраняет, пустая строка очищает. Неуказанные поля сохраняются. Measurement: секунды, метры, килограммы помощи; без Measurement старые Reps/Weight сохраняют прежний смысл")]
         SetPatchViewModel body,
         CancellationToken ct)
         => client.PatchSetAsync(workoutId, sessionId, setId, body, ct);

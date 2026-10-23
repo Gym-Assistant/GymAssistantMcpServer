@@ -169,11 +169,13 @@ def register_core_tools(mcp, api_get, api_url):
         n: количество (default 10, max 50). Дата — локальная в часовом поясе пользователя."""
         n = max(1, min(int(n), 50))
         tz, _ = user_time_zone(api_get)
-        data = api_get('/workouts', {'offset': 0, 'limit': max(n, 30)})
-        items = _items(data)
+        items, complete = load_workouts(api_get)
+        if not complete:
+            raise ValueError('История прочитана не полностью; последняя тренировка не подтверждена.')
+        items = [w for w in items if not w.get('isDeleted')]
         ex_idx = exercises()
         summaries = [summarize_workout(w, ex_idx, tz) for w in items]
-        summaries = [s for s in summaries if s['sets_count'] > 0]
+        summaries = [s for s in summaries if s['sets_count'] > 0 or s.get('comment') or s.get('set_comments')]
         summaries.sort(key=lambda s: s.get('date') or '', reverse=True)
         return summaries[:n]
 
