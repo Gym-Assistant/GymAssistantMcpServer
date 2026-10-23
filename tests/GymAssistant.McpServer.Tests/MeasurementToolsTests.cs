@@ -18,11 +18,12 @@ public sealed class MeasurementToolsTests
     [Fact]
     public async Task Workout_and_set_comments_are_returned_and_patch_sends_only_comment()
     {
-        using var handler = new Handler("""{"comment":"Самочувствие","trainSessions":[{"sets":[{"comment":"Тяжёлый повтор","weight":80,"reps":8}]}]}""");
+        using var handler = new Handler("""{"comment":"Самочувствие","trainSessions":[{"comment":"Тренажёр занят","sets":[{"comment":"Тяжёлый повтор","weight":80,"reps":8}]}]}""");
         using var http = new HttpClient(handler);
         var client = new GymAssistant.Client.Client("https://example.test", http);
         var workout = await WorkoutTools.GetWorkoutAsync(client, Id, default);
         Assert.Equal("Самочувствие", workout.Comment);
+        Assert.Equal("Тренажёр занят", Assert.Single(workout.TrainSessions).Comment);
         Assert.Equal("Тяжёлый повтор", Assert.Single(Assert.Single(workout.TrainSessions).Sets).Comment);
         await WorkoutTools.UpdateSetAsync(client, Id, Id, Id, new SetPatchViewModel { Comment = "" }, default);
         Assert.Equal("", (string?)handler.Calls[1].Body!["comment"]);

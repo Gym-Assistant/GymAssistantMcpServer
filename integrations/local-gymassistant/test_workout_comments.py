@@ -15,6 +15,13 @@ class CommentsTest(unittest.TestCase):
         self.assertEqual(result['set_comments'][1]['exercise_id'],'e')
         self.assertFalse(result['set_comments'][1]['is_done'])
 
+    def test_session_note_survives_with_no_completed_sets(self):
+        result = summarize_workout({'id': 'w', 'trainSessions': [{'id': 's', 'exerciseId': 'e', 'comment': 'Тренажёр занят', 'sets': []}]}, {'e': {'name': 'Жим'}}, lambda _: None)
+        self.assertEqual(result['sets_count'], 0)
+        self.assertEqual(result['volume_kg'], 0)
+        self.assertEqual(result['exercise_comments'][0]['comment'], 'Тренажёр занят')
+        self.assertEqual(result['exercise_comments'][0]['session_id'], 's')
+
     def test_old_data_is_readable(self):
         result = summarize_workout({'id':'w'}, {}, lambda _: None)
         self.assertIsNone(result['comment'])
