@@ -8,7 +8,7 @@ namespace GymAssistant.McpServer.Tools;
 public static class WorkoutTools
 {
     [McpServerTool(Name = "list_workouts", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Список тренировок пользователя с пагинацией (новые сверху). Каждая тренировка содержит TrainSessions с подходами, Comment тренировки и Comment каждого подхода. Это заметки пользователя, учитывай их при анализе. Scope: workouts:read.")]
+     Description("Список тренировок пользователя с пагинацией (новые сверху). Каждая тренировка содержит TrainSessions с подходами, Comment тренировки и Comment каждого упражнения (TrainSession) и подхода. Это заметки пользователя, учитывай их при анализе. Scope: workouts:read.")]
     public static Task<WorkoutViewModelPaged> ListWorkoutsAsync(
         GymClient client,
         CancellationToken ct,
@@ -17,7 +17,7 @@ public static class WorkoutTools
         => client.GetUserWorkoutsAsync(offset, limit, null, null, ct);
 
     [McpServerTool(Name = "get_workout", ReadOnly = true, Idempotent = true, Destructive = false),
-     Description("Получить тренировку по id со всеми тренировочными сессиями (TrainSessions) и подходами (Sets), включая Comment тренировки и подходов. Scope: workouts:read.")]
+     Description("Получить тренировку по id со всеми тренировочными сессиями (TrainSessions) и подходами (Sets), включая Comment тренировки, упражнения в тренировке (TrainSession) и подходов. Scope: workouts:read.")]
     public static Task<WorkoutViewModel> GetWorkoutAsync(
         GymClient client,
         [Description("ID тренировки")] Guid id,

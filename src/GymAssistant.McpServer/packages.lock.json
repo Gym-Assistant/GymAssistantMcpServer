@@ -4,9 +4,9 @@
     "net10.0": {
       "GymAssistant.Client": {
         "type": "Direct",
-        "requested": "[0.21.0, )",
-        "resolved": "0.21.0",
-        "contentHash": "u7bxdOkt78Nfa8nUZyAXJp/0LFaK1q+FPI6MQhz7kWd802b2W1NeAnKjKv0dEz8UEDzfcij7ubaWzrbOiD2erg==",
+        "requested": "[0.22.0, )",
+        "resolved": "0.22.0",
+        "contentHash": "U+ZejrCHU7vCrFirQN4YtHc/w6XhgK6L19y5x7e2RCSEaPmvSe1UUzjPU/LlaVlV4jyVSKz6ZKuU9kkRjjXnOw==",
         "dependencies": {
           "Newtonsoft.Json": "13.0.4"
         }

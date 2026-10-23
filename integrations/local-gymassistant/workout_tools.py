@@ -48,6 +48,12 @@ def summarize_workout(workout, exercises, workout_date):
     return {
         'id': workout.get('id'), 'date': workout_date(workout),
         'comment': workout.get('comment'),
+        'exercise_comments': [
+            {'session_id': session.get('id'), 'exercise_id': session.get('exerciseId'),
+             'exercise': exercises.get(session.get('exerciseId', ''), {}).get('name', '?'),
+             'comment': session['comment']}
+            for session in workout.get('trainSessions') or [] if session.get('comment')
+        ],
         'set_comments': [
             {'session_id': session.get('id'), 'exercise_id': session.get('exerciseId'),
              'exercise': exercises.get(session.get('exerciseId', ''), {}).get('name', '?'),
