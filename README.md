@@ -4,37 +4,28 @@ MCP-сервер, который даёт твоему Claude/Cursor/Codex до�
 
 44 инструмента — read и write по тренировкам, замерам тела, упражнениям, планам и Apple Health. Авторизация — через **Personal API Token** (PAT) с гранулярными scope'ами.
 
-## Установка
+## Подключение нового пользователя
 
-### 1. Получи PAT
+**[Пошаговая установка без Docker и GitHub Packages → QUICKSTART.md](QUICKSTART.md)**
 
-В приложении GymAssistant открой **Настройки → API-токены** и создай Personal API Token с нужными правами. Запиши значение — оно показывается один раз, потом только хэш.
+Рекомендуемый путь первого подключения — существующий Python stdio-коннектор
+из `integrations/local-gymassistant`: 15 инструментов, личный API-токен,
+локальная установка. В нём доступны безопасное создание и дополнение планов.
+Не передавайте токен в чат; сохраняйте его в локальном закрытом env-файле.
 
-Если у тебя ещё нет аккаунта на GymAssistant — заведи его через Telegram-бота или мини-аппу.
+Этот репозиторий также содержит .NET MCP с 44 инструментами (описан ниже).
+Выпуск Docker `0.6.0` проверяется отдельно от Python: это разные реализации и наборы инструментов.
+На проверке 03.11.2026 анонимное получение образа GHCR вернуло **401**;
+прежняя инструкция с `latest` не является рабочим публичным стартом для нового пользователя.
+Доступ к приватному registry не требуется для Python-варианта.
 
-Образ выпускается в GitHub Container Registry. Если пакет приватный, сначала войти в `ghcr.io` своей учётной записью GitHub с правом `read:packages`; видимость пакета не расширяется автоматически.
+Для уже авторизованных пользователей registry .NET запускается так:
 
-### 2. Подключи к Claude Code
-
-```bash
-claude mcp add gymassistant -- docker run -i --rm \
-  -e GYM_API_TOKEN=gma_ТВОЙ_ТОКЕН \
-  ghcr.io/gym-assistant/gymassistant-mcp-server:latest
-```
-
-### 3. Подключи к Cursor / Continue / другим MCP-клиентам
-
-Добавь в `mcp.json` (точное имя/расположение конфига зависит от клиента):
-```json
-{
-  "mcpServers": {
-    "gymassistant": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "GYM_API_TOKEN", "ghcr.io/gym-assistant/gymassistant-mcp-server:latest"],
-      "env": { "GYM_API_TOKEN": "gma_ТВОЙ_ТОКЕН" }
-    }
-  }
-}
+```sh
+# Файл содержит GYM_API_TOKEN и доступен только владельцу (chmod 600).
+# Не добавляйте токен непосредственно в команду или сообщения ассистенту.
+docker run --rm -i --env-file /абсолютный/путь/gymassistant.env \
+  ghcr.io/gym-assistant/gymassistant-mcp-server:0.6.0
 ```
 
 ## Конфигурация (env vars)
@@ -71,6 +62,8 @@ claude mcp add gymassistant -- docker run -i --rm \
 
 ### Известные ограничения
 
+- **03.11.2026: Docker 0.6.0 несовместим с явным `measurement: null`** в обычных силовых подходах: `list_plans` и `list_workouts` падают при десериализации, хотя API возвращает 200. До исправления и нового проверенного .NET-выпуска используйте Python-коннектор из QUICKSTART. Это не повреждение ваших планов.
+
 - `get_workouts_report` и `check_plan_updates` возвращают только факт успешного вызова. Backend объявляет эти маршруты без типа ответа (`Produces(200)`), поэтому NSwag генерирует в `GymAssistant.Client` метод `void`, и тело (файл отчёта, `{hasUpdate, latestRevision}`) теряется. Исправление — на стороне backend: `Produces<T>` (или отдельный текстовый/JSON-ответ для отчёта), новая версия клиента и обновление пакета здесь. До этого используй `list_workouts`/`get_workout` и сравнение `ForkedFromRevision` с `Revision` исходного плана.
 - `create_plan` — сырой upsert полного `PlanViewModel`: можно перезаписать существующий план. Безопасное создание и добавление дней пока есть только в локальном Python-сервере (`integrations/local-gymassistant`), план сведения — `docs/mcp-convergence-plan.md`.
 
@@ -80,7 +73,7 @@ claude mcp add gymassistant -- docker run -i --rm \
 
 ## Troubleshooting
 
-- **`FATAL: GYM_API_TOKEN is required`** — env-переменная не передалась в контейнер. Проверь `-e GYM_API_TOKEN=...` в `docker run`.
+- **`FATAL: GYM_API_TOKEN is required`** — env-переменная не передалась в контейнер. Проверь защищённый `--env-file` в `docker run`.
 - **`GYM_API_TOKEN has invalid shape`** — токен не соответствует формату `gma_` + 40-80 URL-safe символов. Сгенерируй новый.
 - **HTTP 401 + `token expired`** — твой PAT просрочен. Создай новый в приложении: Настройки → API-токены.
 - **HTTP 403** — у токена нет нужного scope. Создай новый PAT с расширенным набором scope'ов.
@@ -91,7 +84,7 @@ claude mcp add gymassistant -- docker run -i --rm \
 
 - .NET 10
 - `ModelContextProtocol` 1.3.x
-- `GymAssistant.Client` 0.18.0 (NSwag-сгенерированный клиент)
+- `GymAssistant.Client` 0.22.0 (NSwag-сгенерированный клиент)
 - Сервер совместим с любым MCP-клиентом, поддерживающим stdio-транспорт
 
 ## Лицензия

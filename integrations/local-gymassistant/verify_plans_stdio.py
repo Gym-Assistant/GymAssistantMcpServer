@@ -57,7 +57,7 @@ HEALTH = [{
 }]
 METRICS = {'metrics': [{'key': 'steps', 'unit': 'count', 'aggregation': 'sum'}]}
 WORKOUT = {'id': 'fixture-workout', 'trainSessions': [{'exerciseId': PERSONAL, 'sets': [
-    {'number': 1, 'isDone': True, 'weight': 80, 'reps': 10, 'createdAt': '2026-10-20T10:00:00Z'},
+    {'number': 1, 'isDone': True, 'weight': 80, 'reps': 10, 'measurement': None, 'createdAt': '2026-10-20T10:00:00Z'},
     {'number': 2, 'isDone': True, 'weight': 200, 'reps': 100, 'createdAt': '2026-10-20T10:00:00Z',
      'measurement': {'trackingType': 'cardio', 'durationSeconds': 120, 'distanceMeters': 500}},
 ]}]}
