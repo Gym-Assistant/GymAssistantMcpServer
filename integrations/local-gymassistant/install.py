@@ -15,7 +15,8 @@ import sys
 
 
 SOURCE = Path(__file__).resolve().parent
-MANAGED = ['server.py', 'core_tools.py', 'health_tools.py', 'plan_tools.py', 'workout_tools.py', 'requirements.txt']
+MANAGED = ['server.py', 'core_tools.py', 'health_tools.py', 'plan_tools.py', 'workout_tools.py',
+           'http_transport.py', 'compat_tools.py', 'remote_http.py', 'requirements.txt']
 WRAPPER = 'run.sh'
 
 

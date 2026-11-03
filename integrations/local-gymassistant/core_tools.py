@@ -142,21 +142,20 @@ def _body_series(api_get):
 
 
 def register_core_tools(mcp, api_get, api_url):
-    cache: dict[str, dict] = {}
-
     def exercises() -> dict[str, dict]:
-        if cache:
-            return cache
+        # HTTP uses one tool registry for many PATs. Personal exercises must be
+        # fetched for each invocation, never retained in a shared closure.
+        index: dict[str, dict] = {}
         offset = 0
         while True:
             data = api_get('/exercises', {'offset': offset, 'limit': 200})
             items = data.get('items', []) if isinstance(data, dict) else data
             for e in items:
-                cache[e['id']] = e
+                index[e['id']] = e
             if not items or len(items) < 200:
                 break
             offset += len(items)
-        return cache
+        return index
 
     @mcp.tool()
     def gym_me() -> dict:

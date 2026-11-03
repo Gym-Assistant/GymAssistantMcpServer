@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import server
+from compat_tools import COMPAT_TOOL_NAMES
 
 EXPECTED_TOOLS = {
     'gym_me', 'gym_workouts', 'gym_workout', 'gym_records', 'gym_body_latest',
@@ -68,23 +69,29 @@ class BuildServerTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             server.build_server({'GYM_API_URL': 'http://127.0.0.1:1/api'})
 
-    def test_registers_all_fifteen_tools(self):
+    def test_registers_original_and_compatibility_tools(self):
         mcp = server.build_server({'GYM_API_TOKEN': 'gma_fixture', 'GYM_API_URL': 'http://127.0.0.1:1/api/'})
         names = {tool.name for tool in asyncio.run(mcp.list_tools())}
-        self.assertEqual(names, EXPECTED_TOOLS)
+        self.assertEqual(names, EXPECTED_TOOLS | COMPAT_TOOL_NAMES)
 
     def health_server(self, owners):
         calls = []
 
+        case = self
         def fake_factory(api_url, token):
-            self.assertEqual(api_url, 'http://127.0.0.1:1/api')
+            case.assertEqual(api_url, 'http://127.0.0.1:1/api')
             def get(path, params=None, override=None):
                 used = override or token
                 calls.append((path, used))
                 return {'id': owners[used]} if path == '/auth/me' else {'metrics': []}
             return get
 
-        with patch.object(server, 'make_api_get', fake_factory):
+        class Transport:
+            def __init__(self, api_url, token):
+                self.get = fake_factory(api_url, token)
+            def write(self, *_args, **_kwargs):
+                raise AssertionError('No writes expected')
+        with patch.object(server, 'ApiTransport', Transport):
             mcp = server.build_server({'GYM_API_TOKEN': 'gma_main', 'GYM_HEALTH_API_TOKEN': 'gma_health',
                                        'GYM_API_URL': 'http://127.0.0.1:1/api'})
         return mcp, calls

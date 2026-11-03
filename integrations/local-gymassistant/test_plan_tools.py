@@ -361,7 +361,7 @@ class PlanToolsTests(unittest.TestCase):
 class PlanWriterTests(unittest.TestCase):
     def test_posts_utf8_json_once_to_expected_route_and_ignores_empty_response(self):
         body = {'name': 'План', 'id': PERSONAL}
-        with patch('plan_tools.urllib.request.urlopen') as urlopen:
+        with patch('http_transport.urllib.request.OpenerDirector.open') as urlopen:
             urlopen.return_value.__enter__.return_value.read.return_value = b''
             make_plan_writer('https://example.invalid/api/', 'synthetic-token')(body)
             urlopen.assert_called_once()
@@ -373,8 +373,8 @@ class PlanWriterTests(unittest.TestCase):
             self.assertEqual(urlopen.call_args.kwargs['timeout'], 30)
 
     def test_writer_does_not_retry_network_error(self):
-        with patch('plan_tools.urllib.request.urlopen', side_effect=TimeoutError) as urlopen:
-            with self.assertRaises(TimeoutError):
+        with patch('http_transport.urllib.request.OpenerDirector.open', side_effect=TimeoutError) as urlopen:
+            with self.assertRaisesRegex(OSError, 'недоступен'):
                 make_plan_writer('https://example.invalid/api', 'synthetic-token')({'id': PERSONAL})
             urlopen.assert_called_once()
 

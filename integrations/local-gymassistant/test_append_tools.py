@@ -156,8 +156,8 @@ class AppendTests(unittest.TestCase):
         class Response:
             def __enter__(self): return self
             def __exit__(self, *args): pass
-            def read(self): return json.dumps({'id': PLAN}).encode()
-        with patch('plan_tools.urllib.request.urlopen', return_value=Response()) as call:
+            def read(self, _limit=None): return json.dumps({'id': PLAN}).encode()
+        with patch('http_transport.urllib.request.OpenerDirector.open', return_value=Response()) as call:
             result = make_plan_appender('http://127.0.0.1:4321/api', 'fixture')(PLAN, {'templates': []})
             request = call.call_args.args[0]
             self.assertEqual(request.full_url, f'http://127.0.0.1:4321/api/plans/{PLAN}/days')

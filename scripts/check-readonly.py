@@ -42,18 +42,18 @@ async def main(command):
                 names = {t.name for t in (await session.list_tools()).tools}
                 print(json.dumps({'transport': 'PASS', 'tools': len(names)}))
                 for py, net, py_args, net_args in CHECKS:
-                    name, args = (py, py_args) if py in names else (net, net_args)
-                    if name not in names:
-                        failed += 1
-                        print(json.dumps({'tool': name, 'result': 'MISSING'}))
-                        continue
-                    try:
-                        result = await session.call_tool(name, args)
-                        ok = not result.isError
-                    except Exception:
-                        ok = False
-                    failed += not ok
-                    print(json.dumps({'tool': name, 'result': 'PASS' if ok else 'FAIL'}))
+                    for name, args in ((py, py_args), (net, net_args)):
+                        if name not in names:
+                            failed += 1
+                            print(json.dumps({'tool': name, 'result': 'MISSING'}))
+                            continue
+                        try:
+                            result = await session.call_tool(name, args)
+                            ok = not result.isError
+                        except Exception:
+                            ok = False
+                        failed += not ok
+                        print(json.dumps({'tool': name, 'result': 'PASS' if ok else 'FAIL'}))
     return int(bool(failed))
 
 if __name__ == '__main__':
