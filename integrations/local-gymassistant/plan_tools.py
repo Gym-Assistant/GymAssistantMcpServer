@@ -2,12 +2,14 @@
 from datetime import datetime, timezone
 from pathlib import Path
 import os
+from threading import Lock
 from http.client import HTTPException
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 import json
 import urllib.error
 from http_transport import ApiError, ApiTransport, InvalidResponse
+from request_safety import SafetyLimit, encode_payload
 
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -79,8 +81,8 @@ class PlanSet(Input):
 class PlanExercise(Input):
     user_exercise_id: UUID | None = Field(default=None, description='ID личного упражнения из gym_exercises.')
     default_exercise_id: UUID | None = Field(default=None, description='globalId базового упражнения из gym_exercises(source="default").')
-    comment: str = ''
-    sets: list[PlanSet] = Field(min_length=1)
+    comment: str = Field(default='', max_length=10000)
+    sets: list[PlanSet] = Field(min_length=1, max_length=50)
 
     @model_validator(mode='after')
     def one_exercise(self):
@@ -90,9 +92,9 @@ class PlanExercise(Input):
 
 
 class PlanDay(Input):
-    title: str = Field(min_length=1)
-    description: str = ''
-    exercises: list[PlanExercise] = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default='', max_length=10000)
+    exercises: list[PlanExercise] = Field(min_length=1, max_length=50)
 
 
 def _items(response):
@@ -101,7 +103,7 @@ def _items(response):
 
 def _all(api_get, path):
     offset = 0
-    while True:
+    for _ in range(50):
         response = api_get(path, {'offset': offset, 'limit': 100})
         items = _items(response)
         yield from items
@@ -109,6 +111,7 @@ def _all(api_get, path):
         total = response.get('total') if isinstance(response, dict) else None
         if not items or (total is not None and offset >= total) or (total is None and len(items) < 100):
             return
+    raise SafetyLimit('Каталог прочитан не полностью: предел 50 страниц. Запись не отправлена.')
 
 
 def _owner(api_get):
@@ -262,9 +265,9 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
         return api_get('/exercises/defaults/' + str(global_id))
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False))
-    def gym_create_plan(name: Annotated[str, Field(min_length=1)],
-                        days: Annotated[list[PlanDay], Field(min_length=1)],
-                        description: str = '',
+    def gym_create_plan(name: Annotated[str, Field(min_length=1, max_length=200)],
+                        days: Annotated[list[PlanDay], Field(min_length=1, max_length=31)],
+                        description: Annotated[str, Field(max_length=10000)] = '',
                         work_rest_seconds: Annotated[int | None, Field(ge=0)] = None,
                         warmup_rest_seconds: Annotated[int | None, Field(ge=0)] = None) -> dict:
         """Создать согласованный с пользователем НОВЫЙ личный план с днями и подходами.
@@ -285,7 +288,11 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
         if not name:
             raise ValueError('Название плана не может быть пустым.')
         # Валидация также при прямом вызове, вне MCP/Pydantic-обвязки.
+        if len(days) > 31:
+            raise SafetyLimit('За один вызов можно добавить до 31 дня.')
         days = [PlanDay.model_validate(day) for day in days]
+        if sum(len(e.sets) for d in days for e in d.exercises) > 2000:
+            raise SafetyLimit('За один вызов можно добавить до 2000 подходов.')
         if not days:
             raise ValueError('Добавьте хотя бы один день.')
         indexes = _exercise_indexes(api_get, days)
@@ -322,7 +329,7 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False))
     def gym_append_plan_days(plan_id: UUID, expected_updated_at: str,
-                             days: Annotated[list[PlanDay], Field(min_length=1)]) -> dict:
+                             days: Annotated[list[PlanDay], Field(min_length=1, max_length=31)]) -> dict:
         """Добавить согласованные дни В КОНЕЦ существующего личного плана.
 
         Scopes: profile:read, plans:read, plans:write, exercises:read.
@@ -335,7 +342,11 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
         Это дни-шаблоны, не тренировки в календаре: date отсутствует в модели API.
         Новые форматы — sets[].measurement как в gym_create_plan; прежние дни не пересчитываются.
         """
+        if len(days) > 31:
+            raise SafetyLimit('За один вызов можно добавить до 31 дня.')
         days = [PlanDay.model_validate(day) for day in days]
+        if sum(len(e.sets) for d in days for e in d.exercises) > 2000:
+            raise SafetyLimit('За один вызов можно добавить до 2000 подходов.')
         if not days:
             raise ValueError('Добавьте хотя бы один новый день.')
         expected = _timestamp(expected_updated_at)
@@ -397,17 +408,27 @@ def _preserved(original, saved, added_ids):
     return set(added_ids) <= saved_ids and isinstance(saved.get('updatedAt'), str)
 
 
+_BACKUP_LOCK = Lock()
+
+
 def _backup_plan(original, addition):
-    """Личная восстанавливаемая копия до изменения; вне репозитория и журналов."""
+    """Копия перед append, без автоматического удаления прежних копий."""
+    encode_payload(addition)
+    data = json.dumps({'before': original, 'addition': addition}, ensure_ascii=False, allow_nan=False).encode('utf-8')
+    if len(data) > 4 * 1024 * 1024:
+        raise SafetyLimit('Копия плана превышает 4 МиБ; запись не отправлена.')
     root = Path(os.environ.get('GYM_PLAN_BACKUP_DIR',
                 str(Path.home() / 'Library/Application Support/GymAssistant/McpBackups')))
-    root.mkdir(parents=True, exist_ok=True, mode=0o700)
-    path = root / f"plan-{original['id']}-{uuid4()}.json"
-    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    with os.fdopen(fd, 'w') as stream:
-        json.dump({'before': original, 'addition': addition}, stream, ensure_ascii=False, allow_nan=False)
-        stream.flush()
-        os.fsync(stream.fileno())
+    with _BACKUP_LOCK:
+        root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if sum(p.stat().st_size for p in root.glob('plan-*.json') if p.is_file()) + len(data) > 100 * 1024 * 1024:
+            raise SafetyLimit('Копии планов достигли 100 МиБ. Сохраните нужные копии и освободите место.')
+        path = root / f"plan-{original['id']}-{uuid4()}.json"
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
 
 
 def make_plan_appender(api_url, token):

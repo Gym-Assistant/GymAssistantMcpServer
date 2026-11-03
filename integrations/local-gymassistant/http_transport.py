@@ -11,6 +11,8 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable
 
+from request_safety import PROCESS_GUARD, SafetyLimit, encode_payload
+
 
 class ApiError(OSError):
     def __init__(self, status: int | None, code: str | None = None):
@@ -43,11 +45,14 @@ class ApiTransport:
             raise ValueError('Удалённый GymAssistant API должен использовать HTTPS.')
         self.api_url = api_url.rstrip('/')
         self.token = token
+        self.read_only = False
         self._opener = urllib.request.build_opener(_NoRedirect)
 
     def request(self, method: str, path: str, *, params=None, body=None, token=None, json_response=True):
         if not path.startswith('/') or path.startswith('//') or '?' in path or '#' in path:
             raise ValueError('Некорректный путь GymAssistant API.')
+        if self.read_only and method.upper() != 'GET':
+            raise SafetyLimit('MCP работает только на чтение; запрос записи не отправлен.')
         url = self.api_url + path
         if params:
             url += '?' + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
@@ -58,9 +63,13 @@ class ApiTransport:
         headers = {'Authorization': f'Bearer {credential}', 'Accept': 'application/json'}
         data = None
         if body is not None:
-            data = json.dumps(body, ensure_ascii=False, allow_nan=False).encode('utf-8')
+            data = encode_payload(body)
             headers['Content-Type'] = 'application/json'
         request = urllib.request.Request(url, data=data, headers=headers, method=method)
+        with PROCESS_GUARD.permit(method):
+            return self._send(request, json_response)
+
+    def _send(self, request, json_response):
         try:
             with self._opener.open(request, timeout=30) as response:
                 if not json_response:
@@ -74,6 +83,8 @@ class ApiTransport:
                     raise InvalidResponse('Некорректный ответ GymAssistant API.') from None
         except urllib.error.HTTPError as error:
             status = error.code
+            if status in (429, 503):
+                PROCESS_GUARD.cooldown(error.headers.get('Retry-After'))
             code = None
             if status in (401, 402, 403):
                 try:
