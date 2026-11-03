@@ -1,11 +1,12 @@
-"""Локальный MCP GymAssistant: чтение данных, Apple Health и создание/дополнение планов.
+"""Единый MCP GymAssistant: локальный stdio и подготовленный удалённый HTTP.
 
-Инструменты (15):
+Инструменты (59 имён в одном процессе):
 - core_tools.py:   gym_me, gym_workouts, gym_workout, gym_records,
                    gym_body_latest, gym_body_history, gym_status;
 - health_tools.py: gym_health_daily, gym_health_metrics;
 - plan_tools.py:   gym_plans, gym_plan, gym_exercises, gym_create_plan,
                    gym_append_plan_days, gym_default_exercise.
+- compat_tools.py: 44 совместимых имени прежнего .NET MCP.
 
 Конфигурация (переменные процесса важнее значений из env-файла):
 - GYM_API_TOKEN — обязательный Personal API Token (gma_...);
@@ -17,21 +18,23 @@ Env-файл ищется так: GYM_MCP_ENV_FILE (если задан, фай�
 иначе `.env` рядом с server.py, иначе $XDG_CONFIG_HOME/gymassistant-mcp/.env
 (по умолчанию ~/.config/gymassistant-mcp/.env). Если файла нет — только переменные процесса.
 
-Запуск: `.venv/bin/python server.py` (см. run.sh и README.md). stdout — MCP-транспорт.
+Запуск: `.venv/bin/python server.py` (см. run.sh и QUICKSTART.md). stdout — MCP-транспорт.
+Удалённый режим использует remote_http.py и тот же build_server(remote=True).
 """
 from __future__ import annotations
 
-import json
 import os
-import urllib.parse
-import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from core_tools import register_core_tools
 from health_tools import register_health_tools, same_account_reader
-from plan_tools import register_plan_tools, make_plan_writer, make_plan_appender
+from plan_tools import register_plan_tools
+from compat_tools import register_compat_tools
+from http_transport import ApiTransport
 
 
 DEFAULT_API_URL = 'https://gym-assistant.ru/api'
@@ -75,32 +78,36 @@ def load_config(environ=None, here: Path | None = None) -> dict:
     return {**(read_env_file(path) if path else {}), **environ}
 
 
-def make_api_get(api_url: str, default_token: str):
-    def api_get(path: str, params: dict | None = None, token: str | None = None) -> dict | list:
-        url = f'{api_url}{path}'
-        if params:
-            url += '?' + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
-        request = urllib.request.Request(url, headers={
-            'Authorization': f'Bearer {token or default_token}', 'Accept': 'application/json'})
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.loads(response.read().decode('utf-8'))
-    return api_get
-
-
-def build_server(config: dict) -> FastMCP:
+def build_server(config: dict, *, remote: bool = False) -> FastMCP:
     api_url = (config.get('GYM_API_URL') or DEFAULT_API_URL).rstrip('/')
     token = config.get('GYM_API_TOKEN')
-    if not token:
+    if not remote and not token:
         raise SystemExit('ERROR: GYM_API_TOKEN не задан (env-файл или переменная окружения)')
-    api_get = make_api_get(api_url, token)
-    mcp = FastMCP('gymassistant')
+    if remote:
+        from remote_http import current_bearer
+        token = current_bearer
+    transport = ApiTransport(api_url, token)
+    api_get = transport.get
+    host = config.get('GYM_MCP_HTTP_BIND', '127.0.0.1') if remote else '127.0.0.1'
+    security = None
+    if remote and host not in ('127.0.0.1', 'localhost', '::1'):
+        public = urlsplit(config['GYM_MCP_PUBLIC_URL'])
+        security = TransportSecuritySettings(enable_dns_rebinding_protection=True,
+                                              allowed_hosts=[public.netloc],
+                                              allowed_origins=[f'{public.scheme}://{public.netloc}'])
+    mcp = FastMCP('gymassistant', host=host, stateless_http=remote,
+                  json_response=remote, transport_security=security)
     register_core_tools(mcp, api_get, api_url)
-    health_token = config.get('GYM_HEALTH_API_TOKEN')
+    health_token = None if remote else config.get('GYM_HEALTH_API_TOKEN')
     health_reader = same_account_reader(
         api_get, lambda path, params=None: api_get(path, params, health_token)
     ) if health_token else api_get
     register_health_tools(mcp, health_reader)
-    register_plan_tools(mcp, api_get, make_plan_writer(api_url, token), make_plan_appender(api_url, token))
+    register_plan_tools(mcp, api_get,
+                        lambda body: transport.write('POST', '/plans', body),
+                        lambda plan_id, body: transport.write('POST', f'/plans/{plan_id}/days', body))
+    register_compat_tools(mcp, transport, health_reader,
+                          legacy_writes=not remote and config.get('GYM_ENABLE_LEGACY_WRITES') == '1')
     return mcp
 
 

@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 from uuid import UUID, uuid4
 import json
 import urllib.error
-import urllib.request
+from http_transport import ApiError, ApiTransport, InvalidResponse
 
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -125,9 +125,10 @@ def _owned_plan(api_get, plan_id, owner):
     plan_id = str(UUID(str(plan_id)))
     try:
         plan = api_get(f'/plans/{plan_id}')
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            e.close()
+    except (urllib.error.HTTPError, ApiError) as e:
+        if (e.status if isinstance(e, ApiError) else e.code) == 404:
+            if isinstance(e, urllib.error.HTTPError):
+                e.close()
             raise ValueError(not_found) from None
         raise
     if (not isinstance(plan, dict) or plan.get('isDeleted')
@@ -145,16 +146,8 @@ def _same_id(value, expected):
 
 def make_plan_writer(api_url, token):
     """Один POST без повторов: повтор после таймаута может создать лишний план."""
-    def post(body):
-        request = urllib.request.Request(
-            api_url.rstrip('/') + '/plans',
-            data=json.dumps(body, ensure_ascii=False, allow_nan=False).encode('utf-8'),
-            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json', 'Accept': 'application/json'},
-            method='POST',
-        )
-        with urllib.request.urlopen(request, timeout=30) as response:
-            response.read()
-    return post
+    transport = ApiTransport(api_url, token)
+    return lambda body: transport.write('POST', '/plans', body, json_response=False)
 
 
 def _exercise_indexes(api_get, days):
@@ -309,12 +302,15 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
 
         try:
             api_post_plan(plan)
-        except urllib.error.HTTPError as e:
-            if e.code < 500:
-                raise ValueError(f'План не сохранён: HTTP {e.code}. Проверьте доступ и параметры.') from None
+        except (urllib.error.HTTPError, ApiError) as e:
+            code = e.status if isinstance(e, ApiError) else e.code
+            if isinstance(e, ApiError) and e.code == 'subscription_required':
+                raise ValueError(str(e)) from None
+            if code is not None and code < 500:
+                raise ValueError(f'План не сохранён: HTTP {code}. Проверьте доступ и параметры.') from None
             return {'status': 'unknown', 'plan_id': plan_id,
                     'message': 'Сервер не подтвердил сохранение. Проверьте этот ID через gym_plan перед повтором.'}
-        except (OSError, HTTPException):
+        except (OSError, HTTPException, InvalidResponse):
             return {'status': 'unknown', 'plan_id': plan_id,
                     'message': 'Ответ не получен. Проверьте этот ID через gym_plan перед повтором.'}
         return {'status': 'created', 'plan_id': plan_id, 'name': name,
@@ -360,11 +356,14 @@ def register_plan_tools(mcp, api_get, api_post_plan, api_append_plan=None, backu
                    'message': 'Сохранение не подтверждено. Проверьте эти дни через gym_plan перед повтором.'}
         try:
             saved = api_append_plan(str(plan_id), body)
-        except urllib.error.HTTPError as e:
-            if e.code == 409:
+        except (urllib.error.HTTPError, ApiError) as e:
+            code = e.status if isinstance(e, ApiError) else e.code
+            if isinstance(e, ApiError) and e.code == 'subscription_required':
+                raise ValueError(str(e)) from None
+            if code == 409:
                 raise ValueError('План изменился или IDs уже заняты (409). Перечитайте gym_plan; запрос не повторён.') from None
-            if e.code < 500:
-                raise ValueError(f'Дни не добавлены: HTTP {e.code}. Проверьте доступ и параметры.') from None
+            if code is not None and code < 500:
+                raise ValueError(f'Дни не добавлены: HTTP {code}. Проверьте доступ и параметры.') from None
             return unknown
         except (OSError, HTTPException, ValueError):
             return unknown
@@ -412,13 +411,5 @@ def _backup_plan(original, addition):
 
 
 def make_plan_appender(api_url, token):
-    def append(plan_id, body):
-        request = urllib.request.Request(
-            api_url.rstrip('/') + '/plans/' + str(UUID(plan_id)) + '/days',
-            data=json.dumps(body, ensure_ascii=False, allow_nan=False).encode('utf-8'),
-            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json', 'Accept': 'application/json'},
-            method='POST',
-        )
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.loads(response.read().decode('utf-8'))
-    return append
+    transport = ApiTransport(api_url, token)
+    return lambda plan_id, body: transport.write('POST', '/plans/' + str(UUID(plan_id)) + '/days', body)

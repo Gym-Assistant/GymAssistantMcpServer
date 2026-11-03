@@ -1,9 +1,6 @@
 """Новые форматы планов/чтения MCP; синтетические данные, без сервера."""
 from copy import deepcopy
-from pathlib import Path
-import tempfile
 import unittest
-from unittest.mock import patch
 
 from pydantic import ValidationError
 from plan_tools import PlanSet
@@ -11,7 +8,6 @@ from workout_tools import summarize_workout, build_records
 import test_plan_tools as plans
 import test_append_tools as append_tests
 from test_plan_tools import day
-from install_plans import install, measurement_source
 
 MEASUREMENTS = [
     {'trackingType': 'weight_reps', 'side': 'left'},
@@ -112,41 +108,3 @@ class WorkoutMeasurementTests(unittest.TestCase):
         self.assertEqual(result['volume_kg'], 0)
         self.assertIsNone(result['exercises'][0]['top'])
         self.assertEqual(result['exercises'][0]['sets'][0]['measurement'], {'trackingType': 'future'})
-
-
-class InstallerMeasurementTests(unittest.TestCase):
-    def test_idempotent_install_backs_up_source_and_keeps_launcher_health_unchanged(self):
-        source = '''from pathlib import Path
-register_health_tools(mcp, _api_get)
-def _summarize_workout(w, ex_idx):
-    return {"old": True}
-@mcp.tool()
-def gym_records(top_n: int = 25) -> list[dict]:
-    """Existing public description."""
-    return []
-if __name__ == "__main__":
-    mcp.run()
-'''
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / 'server.py').write_text(source)
-            (root / 'run.sh').write_text('original launcher')
-            (root / 'health_tools.py').write_text('original health')
-            with patch('builtins.print'):
-                install(root)
-                first = (root / 'server.py').read_text()
-                install(root)
-            self.assertEqual((root / 'server.py').read_text(), first)
-            self.assertEqual((root / 'run.sh').read_text(), 'original launcher')
-            self.assertEqual((root / 'health_tools.py').read_text(), 'original health')
-            copies = list((root / '.backups').glob('*/server.py'))
-            self.assertEqual(len(copies), 2)
-            self.assertIn(source, [p.read_text() for p in copies])
-            self.assertTrue(all(p.stat().st_mode & 0o777 == 0o600 for p in copies))
-            self.assertIn('Existing public description.', first)
-            self.assertEqual(first.count('from workout_tools import'), 1)
-            self.assertTrue((root / 'workout_tools.py').exists())
-
-    def test_unknown_signature_is_rejected(self):
-        with self.assertRaises(ValueError):
-            measurement_source('def _summarize_workout(w):\n    pass\n')

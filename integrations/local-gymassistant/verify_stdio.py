@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from compat_tools import COMPAT_TOOL_NAMES
 
 
 TOKEN = 'gma_synthetic_fixture_only'
@@ -128,7 +129,7 @@ async def verify(port, fixture, temporary):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 names = {tool.name for tool in (await session.list_tools()).tools}
-                assert names == EXPECTED_TOOLS, sorted(names ^ EXPECTED_TOOLS)
+                assert names == EXPECTED_TOOLS | COMPAT_TOOL_NAMES, sorted(names ^ (EXPECTED_TOOLS | COMPAT_TOOL_NAMES))
 
                 daily = unpack(await session.call_tool('gym_health_daily', {
                     'from_date': '2026-10-17', 'to_date': '2026-10-17'}))

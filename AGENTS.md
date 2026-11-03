@@ -1,33 +1,17 @@
-# AGENTS.md
-
-Rules for AI coding agents working in this repo.
+# GymAssistant MCP repository rules
 
 ## Scope and safety
-- Keep changes minimal and task-focused.
-- Never commit secrets (PATs, Docker Hub tokens). Use repo secrets or local env.
-- Do not run `git commit`, `git push`, `git reset`, `git rebase`, or force-push unless explicitly asked.
-- Do not touch generated/build output (`bin/`, `obj/`, `.docker-buildx-cache/`).
+- This repository has one supported Python MCP runtime in `integrations/local-gymassistant/`. `server.py` serves stdio; `remote_http.py` prepares Streamable HTTP with the same tools. Do not add a second implementation.
+- Keep production data read-only during verification. Run writes only against isolated synthetic APIs. Never commit tokens, env files, user data, or backup files.
+- Do not run `git commit`, `git push`, `git reset`, `git rebase`, or force-push unless the owner explicitly asks. Never add AI attribution to commit messages.
+- Preserve existing client tool names and input contracts. If a legacy mutation cannot be made safe, keep its name with a clear fail-closed response and document the transition.
+- Backend owns scopes, ownership, entitlement, and gift rules. Never infer access from a price or a local client flag. Remote transport must verify each user's own PAT on every request; no shared service PAT.
+- Mutations are one HTTP attempt. A 5xx, timeout, or malformed success response is an unknown outcome; return IDs for readback. Never auto-retry a write.
+- Do not activate a public HTTP endpoint or production billing gate from this repository without separately authorized deployment and backend evidence.
 
-## Branching and task notes
-- Create new branches using `feature/<short-name>`.
-- Every branch/task must have a short write-up in `docs/tasks/` (Context / Current State / Plan / Done / Verification).
-
-## Architecture & boundaries
-- Tools live in `src/GymAssistant.McpServer/Tools/{Resource}Tools.cs`. One file per resource group.
-- Tools must be thin pass-throughs to `GymAssistant.Client`. No business logic, no aggregation, no caching.
-- Infra in `src/GymAssistant.McpServer/Infra/`. Three responsibilities: env config, http auth handler, client factory.
-- All `Console.Write*` goes to stderr only. stdout is the MCP transport — writing there breaks the protocol.
-
-## Coding conventions
-- .NET 10, nullable enabled, implicit usings.
-- Each tool method has `[McpServerTool(Name = "...")]` and `[Description("...")]`.
-- Tool names: `snake_case`, no `gym_` prefix (MCP client adds server-name prefix automatically).
-- Tool descriptions: Russian short description + key English API terms in parentheses if applicable. State the access the backend actually enforces: `Scope: <scope>.` for `RequireScope` routes, or the fixed phrases from `tests/.../ToolAccessContractTests.cs` for anonymous and authentication-only catalogs. Update that test's route/scope mapping (taken from GymBackendV2 `Program.cs`) whenever a tool or backend route changes.
-- DTO and method names from `GymAssistant.Client` come from NSwag — don't rename, follow whatever the generated client exposes.
-- The NSwag client class is `GymAssistant.Client.Client`, aliased project-wide as `GymClient` (via `<Using Alias>` in csproj).
-
-## Pre-flight checks (before handing off)
-- `dotnet build -c Release` — 0 errors, 0 warnings
-- `dotnet test -c Release` — all pass (reflection-based smoke tests in `tests/`)
-- `docker build .` succeeds (need `GITHUB_PACKAGES_PAT` / user-level nuget.config for restore)
-- Manual `claude mcp add` against local docker image — `health_check` returns ok
+## Structure and checks
+- `http_transport.py`: bounded HTTP, safe errors, per-request token support.
+- `plan_tools.py`: safe new plan and optimistic append. `compat_tools.py`: historical names and guarded raw writes.
+- `test_*.py`, `verify_stdio.py`, `verify_plans_stdio.py`: synthetic contract and real stdio checks.
+- Task notes in `docs/tasks/` are Russian. `README.md` is a summary; `QUICKSTART.md` is the sole installation guide.
+- Before handoff run the Python unit suite, both stdio scripts, fresh install, and relevant read-only checks on the current API. Keep hosted CI for this public repository; never send public forks to the owner's Mac.

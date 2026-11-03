@@ -6,67 +6,39 @@ on:
 
 permissions:
   contents: write
-  packages: write
-
-defaults:
-  run:
-    shell: bash
 
 jobs:
-  publish:
-    if: ${{ vars.CI_RUNNER_MODE != 'local' || (github.event.repository.private == true && github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
+  publish-source:
+    # A public MCP release uses public source and PyPI dependencies, never private GHCR/NuGet.
+    if: ${{ vars.CI_RUNNER_MODE != 'local' || (github.event.repository.private == true && github.actor != 'dependabot[bot]') }}
     runs-on: ${{ fromJSON(vars.CI_RUNNER_MODE == 'local' && '["self-hosted","macOS","ARM64","gymassistant-mac"]' || '["ubuntu-latest"]') }}
-    timeout-minutes: 45
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-
       - uses: ./.github/actions/runner-environment
         with:
           runner-mode: ${{ vars.CI_RUNNER_MODE }}
-          docker: 'true'
-
-      - uses: docker/setup-qemu-action@v3
-        if: runner.os == 'Linux'
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Verify required Docker platforms
-        run: |
-          docker buildx inspect --bootstrap > "$RUNNER_TEMP/mcp-buildx-platforms.txt"
-          grep -q 'linux/amd64' "$RUNNER_TEMP/mcp-buildx-platforms.txt"
-          grep -q 'linux/arm64' "$RUNNER_TEMP/mcp-buildx-platforms.txt"
-
-      - uses: docker/login-action@v3
+      - uses: actions/setup-python@v5
+        if: vars.CI_RUNNER_MODE != 'local'
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract tag without 'v'
-        id: tag
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push multi-arch
-        env:
-          GH_USER: ${{ github.actor }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          python-version: '3.14'
+      - name: Verify local Python runtime
+        if: vars.CI_RUNNER_MODE == 'local'
+        run: python3 -c 'import sys; assert sys.version_info[:2] == (3, 14)'
+      - name: Create isolated environment
         run: |
-          umask 077
-          task_secrets=$(mktemp -d "$RUNNER_TEMP/mcp-build-secrets.XXXXXX")
-          trap 'rm -rf "$task_secrets"' EXIT
-          printf '%s' "$GH_USER" > "$task_secrets/ghuser"
-          printf '%s' "$GH_TOKEN" > "$task_secrets/ghpat"
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --secret "id=ghuser,src=$task_secrets/ghuser" \
-            --secret "id=ghpat,src=$task_secrets/ghpat" \
-            --push \
-            -t ghcr.io/gym-assistant/gymassistant-mcp-server:${{ steps.tag.outputs.version }} \
-            -t ghcr.io/gym-assistant/gymassistant-mcp-server:latest \
-            .
-
-      - uses: softprops/action-gh-release@v2
+          python3 -m venv "$RUNNER_TEMP/gym-mcp-python"
+          echo "$RUNNER_TEMP/gym-mcp-python/bin" >> "$GITHUB_PATH"
+      - name: Install public dependencies
+        run: python -m pip install --disable-pip-version-check -r integrations/local-gymassistant/requirements.txt
+      - name: Verify candidate
+        run: |
+          python -m unittest discover -s integrations/local-gymassistant -q
+          python integrations/local-gymassistant/verify_stdio.py
+          python integrations/local-gymassistant/verify_plans_stdio.py
+      - name: Publish GitHub source release
+        uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true

@@ -1,0 +1,17 @@
+FROM python:3.14-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    GYM_MCP_HTTP_BIND=0.0.0.0 \
+    GYM_MCP_HTTP_PORT=8765
+
+WORKDIR /srv/mcp
+COPY integrations/local-gymassistant/requirements.txt ./requirements.txt
+RUN python -m pip install --no-cache-dir --disable-pip-version-check -r requirements.txt \
+    && groupadd --gid 10001 gymmcp && useradd --uid 10001 --gid 10001 --no-create-home gymmcp \
+    && mkdir -p /var/lib/gymassistant-mcp/backups \
+    && chown -R 10001:10001 /var/lib/gymassistant-mcp
+COPY --chown=10001:10001 integrations/local-gymassistant/*.py ./
+USER 10001:10001
+EXPOSE 8765
+CMD ["python", "remote_http.py"]

@@ -1,0 +1,33 @@
+# Preparation only. Do not apply this fragment to production without release approval.
+services:
+  mcp:
+    image: gymassistant/mcp-http:${MCP_CANDIDATE_TAG:?pin-tested-candidate}
+    restart: unless-stopped
+    read_only: true
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.5
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    environment:
+      GYM_API_URL: https://gym-assistant.ru/api
+      GYM_MCP_HTTP_BIND: 0.0.0.0
+      GYM_MCP_HTTP_PORT: "8765"
+      GYM_MCP_HTTP_ALLOW_NONLOCAL: "1"
+      GYM_MCP_PUBLIC_URL: https://gym-assistant.ru/mcp
+      GYM_PLAN_BACKUP_DIR: /var/lib/gymassistant-mcp/backups
+    volumes:
+      - mcp-plan-backups:/var/lib/gymassistant-mcp/backups
+    expose: ["8765"]
+    networks: [gym-app]
+
+networks:
+  gym-app:
+    external: true
+    name: gym-app_default
+
+volumes:
+  mcp-plan-backups:

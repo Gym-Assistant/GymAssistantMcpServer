@@ -19,14 +19,16 @@ import sys
 import tempfile
 from threading import Thread
 from urllib.parse import parse_qs, urlsplit
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from compat_tools import COMPAT_TOOL_NAMES
 
 
 SOURCE = Path(__file__).resolve().parent
-MODULES = ['server.py', 'core_tools.py', 'health_tools.py', 'plan_tools.py', 'workout_tools.py']
+MODULES = ['server.py', 'core_tools.py', 'health_tools.py', 'plan_tools.py', 'workout_tools.py',
+           'http_transport.py', 'compat_tools.py']
 TOKEN = 'gma_synthetic_fixture_only'
 OWNER = '11111111-1111-4111-8111-111111111111'
 PERSONAL = '22222222-2222-4222-8222-222222222222'
@@ -57,7 +59,7 @@ HEALTH = [{
 }]
 METRICS = {'metrics': [{'key': 'steps', 'unit': 'count', 'aggregation': 'sum'}]}
 WORKOUT = {'id': 'fixture-workout', 'trainSessions': [{'exerciseId': PERSONAL, 'sets': [
-    {'number': 1, 'isDone': True, 'weight': 80, 'reps': 10, 'createdAt': '2026-10-20T10:00:00Z'},
+    {'number': 1, 'isDone': True, 'weight': 80, 'reps': 10, 'measurement': None, 'createdAt': '2026-10-20T10:00:00Z'},
     {'number': 2, 'isDone': True, 'weight': 200, 'reps': 100, 'createdAt': '2026-10-20T10:00:00Z',
      'measurement': {'trackingType': 'cardio', 'durationSeconds': 120, 'distanceMeters': 500}},
 ]}]}
@@ -280,13 +282,22 @@ def assert_payload(plan, request, returned_id):
 async def verify(server_path, port, fixture, error_log):
     async with connection(server_path, port, error_log) as session:
         listed = {tool.name: tool.model_dump() for tool in (await session.list_tools()).tools}
-        assert set(listed) == EXISTING | ADDED
+        assert set(listed) == EXISTING | ADDED | COMPAT_TOOL_NAMES
         for name in ('gym_plans', 'gym_plan', 'gym_exercises', 'gym_default_exercise', 'gym_health_daily', 'gym_health_metrics'):
             assert listed[name]['annotations']['readOnlyHint'] is True
         health_before = unpack(await session.call_tool('gym_health_daily', {
             'from_date': '2026-10-20', 'to_date': '2026-10-20'}))
         metrics_before = unpack(await session.call_tool('gym_health_metrics'))
         assert health_before == HEALTH and metrics_before == METRICS
+        assert unpack(await session.call_tool('get_me'))['id'] == OWNER
+        assert unpack(await session.call_tool('health_check'))['status'] == 'ok'
+        assert unpack(await session.call_tool('list_workouts'))['items'][0]['trainSessions'][0]['sets'][0]['measurement'] is None
+        assert unpack(await session.call_tool('list_plans'))['items'] == []
+        foreign_alias = await session.call_tool('get_plan', {'id': FOREIGN_PLAN})
+        assert foreign_alias.isError and 'Чужой план' not in str(foreign_alias)
+        before_disabled = len(fixture.posts)
+        disabled = await session.call_tool('create_plan', {'body': {'id': str(uuid4()), 'name': 'Не записывать'}})
+        assert disabled.isError and len(fixture.posts) == before_disabled
         assert listed['gym_create_plan']['annotations']['readOnlyHint'] is False
         assert listed['gym_create_plan']['annotations']['idempotentHint'] is False
         assert listed['gym_append_plan_days']['annotations']['readOnlyHint'] is False
@@ -338,7 +349,8 @@ async def verify(server_path, port, fixture, error_log):
             assert (await session.call_tool('gym_plan', {'plan_id': plan_id})).isError
         reads_by_id = [path for method, path, _ in fixture.requests
                        if method == 'GET' and path.startswith('/api/plans/')]
-        assert reads_by_id == [f'/api/plans/{created["plan_id"]}', f'/api/plans/{FOREIGN_PLAN}',
+        assert reads_by_id == [f'/api/plans/{FOREIGN_PLAN}',
+                               f'/api/plans/{created["plan_id"]}', f'/api/plans/{FOREIGN_PLAN}',
                                '/api/plans/77777777-7777-4777-8777-777777777777']
 
         # Некорректный ввод не должен дойти до записи даже через MCP-обвязку.
