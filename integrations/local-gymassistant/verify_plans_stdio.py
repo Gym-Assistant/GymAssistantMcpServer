@@ -28,7 +28,7 @@ from compat_tools import COMPAT_TOOL_NAMES
 
 SOURCE = Path(__file__).resolve().parent
 MODULES = ['server.py', 'core_tools.py', 'health_tools.py', 'plan_tools.py', 'workout_tools.py',
-           'http_transport.py', 'compat_tools.py']
+           'http_transport.py', 'request_safety.py', 'compat_tools.py']
 TOKEN = 'gma_synthetic_fixture_only'
 OWNER = '11111111-1111-4111-8111-111111111111'
 PERSONAL = '22222222-2222-4222-8222-222222222222'

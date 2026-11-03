@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 from http_transport import ApiError, ApiTransport
+from request_safety import SafetyLimit
 
 
 _bearer: ContextVar[str | None] = ContextVar('gym_mcp_http_bearer', default=None)
@@ -51,6 +52,9 @@ class UserPatMiddleware:
         try:
             me = await asyncio.to_thread(ApiTransport(self.api_url, token).get, '/auth/me')
             UUID(str(me['id']))
+        except SafetyLimit:
+            await _json_error(send, 429, 'mcp_rate_limited', 'Лимит MCP достигнут. Повторите позже.')
+            return
         except ApiError as error:
             if error.code == 'subscription_required':
                 await _json_error(send, 403, error.code, 'Для доступа к API нужна действующая подписка.')
@@ -76,6 +80,8 @@ async def _json_error(send, status, code, message):
     headers = [(b'content-type', b'application/json; charset=utf-8'),
                (b'content-length', str(len(body)).encode()),
                (b'cache-control', b'no-store')]
+    if status == 429:
+        headers.append((b'retry-after', b'60'))
     if status in (401, 403):
         challenge = ('Bearer error="insufficient_scope", error_description="subscription_required"'
                      if code == 'subscription_required' else

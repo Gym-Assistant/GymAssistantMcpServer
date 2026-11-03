@@ -27,7 +27,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from mcp.server.fastmcp import FastMCP
+from request_safety import SafeFastMCP as FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from core_tools import register_core_tools
@@ -87,6 +87,7 @@ def build_server(config: dict, *, remote: bool = False) -> FastMCP:
         from remote_http import current_bearer
         token = current_bearer
     transport = ApiTransport(api_url, token)
+    transport.read_only = config.get('GYM_MCP_READ_ONLY') == '1'
     api_get = transport.get
     host = config.get('GYM_MCP_HTTP_BIND', '127.0.0.1') if remote else '127.0.0.1'
     security = None
@@ -97,6 +98,7 @@ def build_server(config: dict, *, remote: bool = False) -> FastMCP:
                                               allowed_origins=[f'{public.scheme}://{public.netloc}'])
     mcp = FastMCP('gymassistant', host=host, stateless_http=remote,
                   json_response=remote, transport_security=security)
+    mcp.read_only = transport.read_only
     register_core_tools(mcp, api_get, api_url)
     health_token = None if remote else config.get('GYM_HEALTH_API_TOKEN')
     health_reader = same_account_reader(

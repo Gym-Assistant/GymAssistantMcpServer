@@ -2,6 +2,7 @@
 from __future__ import annotations
 from workout_tools import summarize_workout as summarize_measured_workout, build_records
 
+from request_safety import SafetyLimit
 from collections import defaultdict
 from datetime import date, datetime, timezone, tzinfo
 from http.client import HTTPException
@@ -121,13 +122,15 @@ def _body_series(api_get):
     chars = [c for c in chars if c.get('name') != 'Вес' and not c.get('isDeleted')]
     stamps = []
     offset = 0
-    while True:
+    for _ in range(50):
         page = api_get('/body/stamps', {'offset': offset, 'limit': 200})
         items = page.get('items', []) if isinstance(page, dict) else page
         stamps.extend(items)
         if not items or len(items) < 200:
             break
         offset += len(items)
+    else:
+        raise SafetyLimit('История замеров прочитана не полностью: предел 50 страниц.')
     char_by_id = {c['id']: c for c in chars}
     valid = []
     for s in stamps:
@@ -147,7 +150,7 @@ def register_core_tools(mcp, api_get, api_url):
         # fetched for each invocation, never retained in a shared closure.
         index: dict[str, dict] = {}
         offset = 0
-        while True:
+        for _ in range(50):
             data = api_get('/exercises', {'offset': offset, 'limit': 200})
             items = data.get('items', []) if isinstance(data, dict) else data
             for e in items:
@@ -155,6 +158,8 @@ def register_core_tools(mcp, api_get, api_url):
             if not items or len(items) < 200:
                 break
             offset += len(items)
+        else:
+            raise SafetyLimit('Каталог прочитан не полностью: предел 50 страниц.')
         return index
 
     @mcp.tool()
