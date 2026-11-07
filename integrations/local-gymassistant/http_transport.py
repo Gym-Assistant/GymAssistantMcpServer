@@ -18,7 +18,9 @@ class ApiError(OSError):
     def __init__(self, status: int | None, code: str | None = None):
         self.status = status
         self.code = code
-        message = ('subscription_required: Для доступа к API нужна действующая подписка.'
+        message = ('plan_workout_start: Для старта по плану нужен доступ уровня Плюс.'
+                   if code == 'plan_workout_start' else
+                   'subscription_required: Для доступа к API нужна действующая подписка.'
                    if code == 'subscription_required' else
                    f'GymAssistant API: HTTP {status}.' if status else 'GymAssistant API недоступен.')
         super().__init__(message)
@@ -89,10 +91,13 @@ class ApiTransport:
             if status in (401, 402, 403):
                 try:
                     payload = json.loads(error.read(4096))
-                    if isinstance(payload, dict) and (
-                            payload.get('code') == 'subscription_required' or
-                            payload.get('error') == 'subscription_required'):
-                        code = 'subscription_required'
+                    if isinstance(payload, dict):
+                        if status == 403 and (payload.get('type') == 'plan_workout_start' or
+                                              payload.get('feature') == 'plan_workout_start'):
+                            code = 'plan_workout_start'
+                        elif (payload.get('code') == 'subscription_required' or
+                              payload.get('error') == 'subscription_required'):
+                            code = 'subscription_required'
                 except (ValueError, UnicodeDecodeError):
                     pass
             error.close()

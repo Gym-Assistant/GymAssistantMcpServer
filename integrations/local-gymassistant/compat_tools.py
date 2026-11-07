@@ -68,7 +68,7 @@ def _write(transport, method, path, body=None, *, identifier=None, response=True
     try:
         return transport.write(method, path, body, json_response=response)
     except ApiError as error:
-        if error.code == 'subscription_required':
+        if error.code in ('subscription_required', 'plan_workout_start'):
             raise ValueError(str(error)) from None
         if error.status is None or error.status >= 500:
             return {'status': 'unknown', 'id': identifier,
