@@ -145,6 +145,14 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(value['status'], 'unknown')
         self.assertNotIn('sensitive raw body', str(result))
 
+    def test_plan_start_preserves_safe_error_through_legacy_write(self):
+        transport = FakeTransport()
+        transport.write_error = ApiError(403, 'plan_workout_start')
+        mcp = FastMCP('fixture')
+        register_compat_tools(mcp, transport, transport.get, legacy_writes=True)
+        with self.assertRaisesRegex(Exception, 'plan_workout_start'):
+            asyncio.run(mcp.call_tool('create_workout', {'body': {'id': str(uuid4())}}))
+
     def test_expired_and_limited_tokens_redact_server_body(self):
         seen = []
 
@@ -158,6 +166,8 @@ class CompatibilityTests(unittest.TestCase):
                 status = 401 if token == 'Bearer gma_expired_synthetic' else 403
                 payload = (b'{"error":"subscription_required","message":"private user@example.invalid"}'
                            if token == 'Bearer gma_subscription_synthetic' else
+                           b'{"error":"subscription_required","type":"plan_workout_start","detail":"private user@example.invalid"}'
+                           if token == 'Bearer gma_plan_start_synthetic' else
                            b'private server detail: user@example.invalid; bearer secret')
                 self.send_response(status)
                 self.send_header('Content-Length', str(len(payload)))
@@ -169,17 +179,18 @@ class CompatibilityTests(unittest.TestCase):
         thread.start()
         try:
             for token, status in [('gma_expired_synthetic', 401), ('gma_limited_synthetic', 403),
-                                  ('gma_subscription_synthetic', 403)]:
+                                  ('gma_subscription_synthetic', 403), ('gma_plan_start_synthetic', 403)]:
                 api = ApiTransport(f'http://127.0.0.1:{server.server_port}/api', token)
                 with self.assertRaises(ApiError) as caught:
                     api.get('/auth/me')
                 self.assertEqual(caught.exception.status, status)
                 self.assertEqual(caught.exception.code,
-                                 'subscription_required' if token == 'gma_subscription_synthetic' else None)
+                                 'subscription_required' if token == 'gma_subscription_synthetic' else
+                                 'plan_workout_start' if token == 'gma_plan_start_synthetic' else None)
                 self.assertNotIn('user@example.invalid', str(caught.exception))
                 self.assertNotIn(token, str(caught.exception))
             self.assertEqual(seen, ['Bearer gma_expired_synthetic', 'Bearer gma_limited_synthetic',
-                                    'Bearer gma_subscription_synthetic'])
+                                    'Bearer gma_subscription_synthetic', 'Bearer gma_plan_start_synthetic'])
         finally:
             server.shutdown()
             server.server_close()
