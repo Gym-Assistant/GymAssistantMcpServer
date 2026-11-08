@@ -150,8 +150,13 @@ class CompatibilityTests(unittest.TestCase):
         transport.write_error = ApiError(403, 'plan_workout_start')
         mcp = FastMCP('fixture')
         register_compat_tools(mcp, transport, transport.get, legacy_writes=True)
-        with self.assertRaisesRegex(Exception, 'plan_workout_start'):
+        with self.assertRaisesRegex(Exception, 'plan_workout_start: Старт из плана — в Плюсе'):
             asyncio.run(mcp.call_tool('create_workout', {'body': {'id': str(uuid4())}}))
+
+    def test_plan_start_is_recognized_before_a_subscription_error_in_the_same_body(self):
+        error = ApiError(403, 'plan_workout_start')
+        self.assertEqual(str(error), 'plan_workout_start: Старт из плана — в Плюсе.')
+        self.assertNotIn('подписка', str(error))
 
     def test_expired_and_limited_tokens_redact_server_body(self):
         seen = []

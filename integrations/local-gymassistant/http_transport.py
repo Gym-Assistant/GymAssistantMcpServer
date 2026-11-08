@@ -18,7 +18,7 @@ class ApiError(OSError):
     def __init__(self, status: int | None, code: str | None = None):
         self.status = status
         self.code = code
-        message = ('plan_workout_start: Для старта по плану нужен доступ уровня Плюс.'
+        message = ('plan_workout_start: Старт из плана — в Плюсе.'
                    if code == 'plan_workout_start' else
                    'subscription_required: Для доступа к API нужна действующая подписка.'
                    if code == 'subscription_required' else
